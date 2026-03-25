@@ -11,6 +11,7 @@ A Model Context Protocol (MCP) server that gives Claude full integration with th
 - **Screenshots** — Capture the editor viewport as a base64 PNG image
 - **Project scanning** — Discover Godot projects and read project metadata
 - **GDScript validation** — Validate scripts using Godot's `--check-only` flag
+- **Testing** — Detect, list, create, and run GDScript tests with GUT, GdUnit4, or the built-in runner
 - **Resource UIDs** — Look up and update Godot 4.4+ resource UIDs
 - **Auto-detects Godot** — Finds the Godot executable automatically on macOS, Windows, and Linux (including Steam installs)
 
@@ -135,6 +136,35 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | `godot_stop_scene` | Stop the running scene |
 | `godot_get_output` | Get scene output |
 | `godot_is_running` | Check if a scene is running |
+
+### Testing
+
+GDScript does not support custom annotations for tests. All frameworks use the `test_` method naming convention. Tests can be run headlessly without opening the editor.
+
+| Tool | Description |
+|------|-------------|
+| `godot_detect_test_framework` | Detect which test framework is installed (GUT, GdUnit4, or built-in) |
+| `godot_list_tests` | List all test files and their `test_` methods |
+| `godot_create_test` | Generate a test file skeleton for a source script |
+| `godot_run_tests` | Run tests headlessly and return pass/fail results |
+
+**Supported frameworks:**
+- **[GUT](https://github.com/bitwes/Gut)** — auto-detected via `addons/gut/`; tests extend `GutTest`
+- **[GdUnit4](https://github.com/MikeSchulze/gdUnit4)** — auto-detected via `addons/gdUnit4/`; tests extend `GdUnitTestSuite`
+- **Built-in** — no addon needed; a minimal test runner is bundled with this MCP server
+
+**Example test (GUT):**
+```gdscript
+extends GutTest
+
+func before_each() -> void:
+    pass
+
+func test_player_starts_with_full_health() -> void:
+    var player = Player.new()
+    assert_eq(player.health, 100)
+    player.free()
+```
 
 ### Visuals & Resources
 
