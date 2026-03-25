@@ -16,6 +16,7 @@ import { registerScreenshotTools } from "./tools/screenshot-tools.js";
 import { registerSceneTools } from "./tools/scene-tools.js";
 import { registerRunTools } from "./tools/run-tools.js";
 import { registerFileTools } from "./tools/file-tools.js";
+import { registerTestTools } from "./tools/test-tools.js";
 
 const server = new McpServer({
   name: "godot-claude-mcp",
@@ -265,6 +266,7 @@ registerScreenshotTools(server, bridge);
 registerSceneTools(server, bridge);
 registerFileTools(server, godotPath);
 registerRunTools(server, processManager, bridge, godotPath);
+registerTestTools(server, godotPath);
 
 // --- Start server ---
 
