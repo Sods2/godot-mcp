@@ -79,3 +79,64 @@ func _find_code_edit(node: Node) -> CodeEdit:
 		if found:
 			return found
 	return null
+
+func create_and_attach(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var root = editor_interface.get_edited_scene_root()
+	if not root:
+		return {"error": "No scene open"}
+	var node_path: String = params.get("node_path", "")
+	var node: Node = root.get_node_or_null(node_path)
+	if not node:
+		return {"error": "Node not found: " + node_path}
+	var script_path: String = params.get("script_path", "")
+	if script_path.is_empty():
+		return {"error": "script_path is required"}
+	var template: String = params.get("template", "")
+	if template.is_empty():
+		template = "extends " + node.get_class() + "\n\n"
+	var file = FileAccess.open(ProjectSettings.globalize_path(script_path), FileAccess.WRITE)
+	if not file:
+		return {"error": "Could not create file: " + script_path}
+	file.store_string(template)
+	file = null
+	var script = load(script_path)
+	if not script:
+		return {"error": "Could not load script: " + script_path}
+	var old_script = node.get_script()
+	var undo_redo = editor_interface.get_editor_undo_redo()
+	undo_redo.create_action("Create and Attach Script")
+	undo_redo.add_do_property(node, "script", script)
+	undo_redo.add_undo_property(node, "script", old_script)
+	undo_redo.commit_action()
+	return {"success": true, "script_path": script_path}
+
+func detach_script(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var root = editor_interface.get_edited_scene_root()
+	if not root:
+		return {"error": "No scene open"}
+	var node_path: String = params.get("node_path", "")
+	var node: Node = root.get_node_or_null(node_path)
+	if not node:
+		return {"error": "Node not found: " + node_path}
+	var old_script = node.get_script()
+	if old_script == null:
+		return {"error": "Node has no script attached"}
+	var undo_redo = editor_interface.get_editor_undo_redo()
+	undo_redo.create_action("Detach Script")
+	undo_redo.add_do_property(node, "script", null)
+	undo_redo.add_undo_property(node, "script", old_script)
+	undo_redo.commit_action()
+	return {"success": true}
+
+func get_script_for_node(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var root = editor_interface.get_edited_scene_root()
+	if not root:
+		return {"error": "No scene open"}
+	var node_path: String = params.get("path", "")
+	var node: Node = root.get_node_or_null(node_path)
+	if not node:
+		return {"error": "Node not found: " + node_path}
+	var script = node.get_script()
+	if script == null:
+		return {"script": null}
+	return {"script_path": script.resource_path, "class_name": script.get_global_name()}

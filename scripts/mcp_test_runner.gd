@@ -9,6 +9,7 @@ const DEFAULT_TEST_DIR := "res://tests"
 func _init() -> void:
 	var test_dir := DEFAULT_TEST_DIR
 	var test_filter := ""
+	var test_method := ""
 
 	# Parse custom args after "--"
 	var args := OS.get_cmdline_user_args()
@@ -17,13 +18,15 @@ func _init() -> void:
 			test_dir = arg.substr("--test-dir=".length())
 		elif arg.begins_with("--test-filter="):
 			test_filter = arg.substr("--test-filter=".length())
+		elif arg.begins_with("--test-method="):
+			test_method = arg.substr("--test-method=".length())
 
-	var results := run_all_tests(test_dir, test_filter)
+	var results := run_all_tests(test_dir, test_filter, test_method)
 	print(JSON.stringify(results))
 	quit(results.failed + results.errors)
 
 
-func run_all_tests(test_dir: String, test_filter: String) -> Dictionary:
+func run_all_tests(test_dir: String, test_filter: String, test_method: String = "") -> Dictionary:
 	var test_files := discover_test_files(test_dir)
 	var all_tests: Array = []
 	var total_passed := 0
@@ -33,7 +36,7 @@ func run_all_tests(test_dir: String, test_filter: String) -> Dictionary:
 	var start_time := Time.get_ticks_msec()
 
 	for file_path in test_files:
-		var file_results := run_test_file(file_path, test_filter)
+		var file_results := run_test_file(file_path, test_filter, test_method)
 		all_tests.append_array(file_results.tests)
 		total_passed += file_results.passed
 		total_failed += file_results.failed
@@ -71,7 +74,7 @@ func discover_test_files(dir_path: String) -> Array:
 	return files
 
 
-func run_test_file(file_path: String, test_filter: String) -> Dictionary:
+func run_test_file(file_path: String, test_filter: String, test_method: String = "") -> Dictionary:
 	var tests: Array = []
 	var passed := 0
 	var failed := 0
@@ -91,6 +94,8 @@ func run_test_file(file_path: String, test_filter: String) -> Dictionary:
 	for m in methods:
 		var mname: String = m.name
 		if mname.begins_with("test_"):
+			if not test_method.is_empty() and mname != test_method:
+				continue
 			if test_filter == "" or test_filter in mname:
 				test_methods.append(mname)
 

@@ -7,12 +7,13 @@ func get_tree(editor_interface: EditorInterface, params: Dictionary) -> Dictiona
 	if root == null:
 		return {"error": "No scene open"}
 	var max_depth: int = params.get("max_depth", 10)
+	var type_filter: String = params.get("type_filter", "")
 	return {
 		"scene_path": root.scene_file_path,
-		"root": _describe_node(root, 0, max_depth)
+		"root": _describe_node(root, 0, max_depth, type_filter)
 	}
 
-func _describe_node(node: Node, depth: int, max_depth: int) -> Dictionary:
+func _describe_node(node: Node, depth: int, max_depth: int, type_filter: String = "") -> Dictionary:
 	var result := {
 		"name": node.name,
 		"type": node.get_class(),
@@ -21,7 +22,9 @@ func _describe_node(node: Node, depth: int, max_depth: int) -> Dictionary:
 	}
 	if depth < max_depth:
 		for child in node.get_children():
-			result["children"].append(_describe_node(child, depth + 1, max_depth))
+			var child_result := _describe_node(child, depth + 1, max_depth, type_filter)
+			if type_filter == "" or child.is_class(type_filter) or child_result["children"].size() > 0:
+				result["children"].append(child_result)
 	return result
 
 func get_selected(editor_interface: EditorInterface) -> Dictionary:
@@ -123,3 +126,75 @@ func open_scene(editor_interface: EditorInterface, params: Dictionary) -> Dictio
 func save_scene(editor_interface: EditorInterface) -> Dictionary:
 	editor_interface.save_scene()
 	return {"success": true}
+
+func rename_node(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var root := editor_interface.get_edited_scene_root()
+	if root == null:
+		return {"error": "No scene open"}
+
+	var node := root.get_node_or_null(params.get("path", ""))
+	if node == null:
+		return {"error": "Node not found: " + params.get("path", "")}
+
+	var old_name: String = node.name
+	var new_name: String = params.get("new_name", "")
+	if new_name == "":
+		return {"error": "new_name is required"}
+
+	var undo_redo := editor_interface.get_editor_undo_redo()
+	undo_redo.create_action("Rename Node")
+	undo_redo.add_do_property(node, "name", new_name)
+	undo_redo.add_undo_property(node, "name", old_name)
+	undo_redo.commit_action()
+
+	return {"success": true, "old_name": old_name, "new_name": new_name, "new_path": str(node.get_path())}
+
+func duplicate_node(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var root := editor_interface.get_edited_scene_root()
+	if root == null:
+		return {"error": "No scene open"}
+
+	var node := root.get_node_or_null(params.get("path", ""))
+	if node == null:
+		return {"error": "Node not found: " + params.get("path", "")}
+
+	var parent := node.get_parent()
+	if parent == null:
+		return {"error": "Cannot duplicate root node"}
+
+	var dup := node.duplicate()
+	if params.has("new_name"):
+		dup.name = params.get("new_name")
+
+	var undo_redo := editor_interface.get_editor_undo_redo()
+	undo_redo.create_action("Duplicate Node")
+	undo_redo.add_do_method(parent, "add_child", dup)
+	undo_redo.add_do_method(dup, "set_owner", root)
+	undo_redo.add_undo_method(parent, "remove_child", dup)
+	undo_redo.commit_action()
+
+	return {"success": true, "path": str(dup.get_path())}
+
+func move_node(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var root := editor_interface.get_edited_scene_root()
+	if root == null:
+		return {"error": "No scene open"}
+
+	var node := root.get_node_or_null(params.get("path", ""))
+	if node == null:
+		return {"error": "Node not found: " + params.get("path", "")}
+
+	var parent := node.get_parent()
+	if parent == null:
+		return {"error": "Cannot move root node"}
+
+	var old_index: int = node.get_index()
+	var new_index: int = params.get("index", 0)
+
+	var undo_redo := editor_interface.get_editor_undo_redo()
+	undo_redo.create_action("Move Node")
+	undo_redo.add_do_method(parent, "move_child", node, new_index)
+	undo_redo.add_undo_method(parent, "move_child", node, old_index)
+	undo_redo.commit_action()
+
+	return {"success": true, "new_index": new_index}

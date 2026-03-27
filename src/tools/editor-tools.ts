@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { BridgeConnection } from "../connection.js";
+import type { EditorStatusResponse, SceneTreeResponse, SelectedNodesResponse, GetPropertiesResponse, OpenSceneResponse, ReparentNodeResponse, RenameNodeResponse, DuplicateNodeResponse, MoveNodeResponse } from "../types/bridge-responses.js";
 
 export function registerEditorTools(
   server: McpServer,
@@ -19,7 +20,7 @@ export function registerEditorTools(
         };
       }
       try {
-        const result = await bridge.send("editor.status");
+        const result = await bridge.send<EditorStatusResponse>("editor.status");
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
@@ -40,11 +41,16 @@ export function registerEditorTools(
         .number()
         .optional()
         .describe("Maximum tree depth to return (default: unlimited)"),
+      type_filter: z
+        .string()
+        .optional()
+        .describe("Filter nodes by type (e.g. 'Sprite2D'). Children of non-matching nodes are still searched."),
     },
-    async ({ max_depth }) => {
+    async ({ max_depth, type_filter }) => {
       try {
-        const result = await bridge.send("scene.get_tree", {
+        const result = await bridge.send<SceneTreeResponse>("scene.get_tree", {
           max_depth,
+          type_filter,
         });
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -64,7 +70,7 @@ export function registerEditorTools(
     {},
     async () => {
       try {
-        const result = await bridge.send("scene.get_selected");
+        const result = await bridge.send<SelectedNodesResponse>("scene.get_selected");
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
@@ -85,7 +91,7 @@ export function registerEditorTools(
     },
     async ({ path }) => {
       try {
-        const result = await bridge.send("inspector.get_properties", {
+        const result = await bridge.send<GetPropertiesResponse>("inspector.get_properties", {
           path,
         });
         return {
@@ -110,7 +116,7 @@ export function registerEditorTools(
     },
     async ({ scene_path }) => {
       try {
-        const result = await bridge.send("scene.open", { path: scene_path });
+        const result = await bridge.send<OpenSceneResponse>("scene.open", { path: scene_path });
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
@@ -132,7 +138,7 @@ export function registerEditorTools(
     },
     async ({ path, new_parent }) => {
       try {
-        const result = await bridge.send("scene.reparent_node", {
+        const result = await bridge.send<ReparentNodeResponse>("scene.reparent_node", {
           path,
           new_parent,
         });
@@ -144,6 +150,57 @@ export function registerEditorTools(
           content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
           isError: true,
         };
+      }
+    }
+  );
+
+  server.tool(
+    "godot_rename_node",
+    "Rename a node in the current scene",
+    {
+      path: z.string().describe("Node path in the scene tree"),
+      new_name: z.string().describe("New name for the node"),
+    },
+    async ({ path, new_name }) => {
+      try {
+        const result = await bridge.send<RenameNodeResponse>("scene.rename_node", { path, new_name });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "godot_duplicate_node",
+    "Duplicate a node in the current scene",
+    {
+      path: z.string().describe("Node path to duplicate"),
+      new_name: z.string().optional().describe("Name for the duplicated node (default: auto-generated)"),
+    },
+    async ({ path, new_name }) => {
+      try {
+        const result = await bridge.send<DuplicateNodeResponse>("scene.duplicate_node", { path, new_name });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "godot_move_node",
+    "Move a node to a different sibling index (reorder within parent)",
+    {
+      path: z.string().describe("Node path to move"),
+      index: z.number().describe("Target sibling index (0 = first child)"),
+    },
+    async ({ path, index }) => {
+      try {
+        const result = await bridge.send<MoveNodeResponse>("scene.move_node", { path, index });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e) {
+        return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };
       }
     }
   );
