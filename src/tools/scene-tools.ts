@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { BridgeConnection } from "../connection.js";
+import type { AddNodeResponse, RemoveNodeResponse, SetPropertyResponse, SaveSceneResponse } from "../types/bridge-responses.js";
 
 const NOT_CONNECTED_MSG =
   "Editor plugin not connected — open project in Godot with godot_claude_bridge addon enabled, or use godot_add_node_to_file for file-based editing";
@@ -34,7 +35,7 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
       }
       try {
         const parsedProps = properties ? JSON.parse(properties) : undefined;
-        const result = await bridge.send("scene.add_node", {
+        const result = await bridge.send<AddNodeResponse>("scene.add_node", {
           type: node_type,
           name: node_name,
           parent: parent_path ?? ".",
@@ -58,7 +59,7 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
         return { ...textResult(NOT_CONNECTED_MSG), isError: true };
       }
       try {
-        const result = await bridge.send("scene.remove_node", { path });
+        const result = await bridge.send<RemoveNodeResponse>("scene.remove_node", { path });
         return textResult(JSON.stringify(result, null, 2));
       } catch (e) {
         return errorResult(e);
@@ -79,7 +80,7 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
         return { ...textResult(NOT_CONNECTED_MSG), isError: true };
       }
       try {
-        const result = await bridge.send("inspector.set_property", {
+        const result = await bridge.send<SetPropertyResponse>("inspector.set_property", {
           path,
           property,
           value,
@@ -102,7 +103,7 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
         );
       }
       try {
-        const result = await bridge.send("scene.save", {});
+        const result = await bridge.send<SaveSceneResponse>("scene.save", {});
         return textResult(JSON.stringify(result, null, 2));
       } catch (e) {
         return errorResult(e);

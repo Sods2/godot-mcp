@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { BridgeConnection } from "../connection.js";
+import type { PlayResponse, StopResponse, GetOutputResponse, IsRunningResponse } from "../types/bridge-responses.js";
 import type { ProcessManager } from "../process-manager.js";
 
 function textResult(text: string) {
@@ -30,7 +31,7 @@ export function registerRunTools(
     async ({ project_path, scene }) => {
       if (bridge.connected) {
         try {
-          const result = await bridge.send("run.play", { scene: scene ?? "" });
+          const result = await bridge.send<PlayResponse>("run.play", { scene: scene ?? "" });
           return textResult(JSON.stringify(result, null, 2));
         } catch (e) {
           return errorResult(e);
@@ -53,7 +54,7 @@ export function registerRunTools(
     async () => {
       if (bridge.connected) {
         try {
-          const result = await bridge.send("run.stop", {});
+          const result = await bridge.send<StopResponse>("run.stop", {});
           return textResult(JSON.stringify(result, null, 2));
         } catch (e) {
           return errorResult(e);
@@ -83,18 +84,21 @@ export function registerRunTools(
   server.tool(
     "godot_get_output",
     "Get stdout/stderr from the running Godot scene",
-    {},
-    async () => {
+    {
+      since_line: z.number().optional().describe("Only return output lines after this index (for polling)"),
+    },
+    async ({ since_line }) => {
       if (bridge.connected) {
         try {
-          const result = await bridge.send("run.get_output", {});
+          const result = await bridge.send<{ output: string[]; total_lines: number }>("run.get_output", { since_line });
           return textResult(JSON.stringify(result, null, 2));
         } catch (e) {
           return errorResult(e);
         }
       }
       const result = processManager.getDebugOutput();
-      return textResult(JSON.stringify(result, null, 2));
+      const output = since_line ? result.output.slice(since_line) : result.output;
+      return textResult(JSON.stringify({ output, total_lines: result.output.length }, null, 2));
     }
   );
 
@@ -105,7 +109,7 @@ export function registerRunTools(
     async () => {
       if (bridge.connected) {
         try {
-          const result = await bridge.send("run.is_running", {});
+          const result = await bridge.send<IsRunningResponse>("run.is_running", {});
           return textResult(JSON.stringify(result, null, 2));
         } catch (e) {
           return errorResult(e);

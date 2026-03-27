@@ -1,18 +1,27 @@
 # godot-claude-mcp
 
-A Model Context Protocol (MCP) server that gives Claude full integration with the Godot game engine IDE. Interact with live editor state, parse and modify scene files, run projects, capture screenshots, and more — all from Claude.
+A Model Context Protocol (MCP) server that gives Claude full integration with the Godot game engine IDE. Interact with live editor state, parse and modify scene files, run projects, capture screenshots, debug with breakpoints, profile performance, and more — all from Claude.
+
+**77 tools** across 14 categories, covering the full Godot development workflow.
 
 ## Features
 
 - **Scene editing** — Parse, create, and modify `.tscn` scene files directly on disk (no editor required)
-- **Live editor integration** — Add/remove nodes, set properties, open scenes, and save via the running Godot editor
-- **Script tools** — Read open scripts, get selected code, and insert code at the cursor
-- **Run/stop scenes** — Launch scenes in debug mode and capture stdout/stderr output
-- **Screenshots** — Capture the editor viewport as a base64 PNG image
-- **Project scanning** — Discover Godot projects and read project metadata
+- **Live editor integration** — Add/remove/rename/duplicate/move/reparent nodes, set properties, open scenes, and save via the running Godot editor
+- **Script tools** — Read open scripts, get selected code, insert code at the cursor, create and attach scripts, detach scripts
+- **Signals** — List, connect, and disconnect signals on nodes
+- **Animation** — List, inspect, and create animations in AnimationPlayer nodes
+- **Run/stop scenes** — Launch scenes in debug mode and capture stdout/stderr output with incremental polling
+- **Screenshots** — Capture the editor viewport or the running game window as base64 PNG images
+- **Debugger** — Set/remove breakpoints, inspect stack traces and local variables, step over/into/out, continue execution
+- **Profiler** — Start/stop profiling and retrieve performance frame data
+- **File & resource management** — Create folders, list directories, delete/rename files, list/import/read/write resources
+- **Export** — List export presets, export projects, export MeshLibrary resources
+- **Project scanning** — Discover Godot projects (with sort and version filter) and read project metadata
 - **GDScript validation** — Validate scripts using Godot's `--check-only` flag
 - **Testing** — Detect, list, create, and run GDScript tests with GUT, GdUnit4, or the built-in runner
 - **Resource UIDs** — Look up and update Godot 4.4+ resource UIDs
+- **Autoloads** — List and add autoload singletons
 - **Auto-detects Godot** — Finds the Godot executable automatically on macOS, Windows, and Linux (including Steam installs)
 
 ## Architecture
@@ -78,75 +87,128 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 
 ### Project & Version
 
-| Tool | Description |
-|------|-------------|
-| `godot_get_version` | Get the installed Godot version |
-| `godot_list_projects` | Scan a directory for Godot projects |
-| `godot_get_project_info` | Get project name, version, and file counts |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_get_version` | Get the installed Godot version | — |
+| `godot_list_projects` | Scan a directory for Godot projects | `sort_by` (name/path/modified), `godot_version` filter |
+| `godot_get_project_info` | Get project name, version, and file counts | `project_path` |
+
+### Autoloads
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_get_autoloads` | List all autoload singletons configured in the project | `project_path` |
+| `godot_add_autoload` | Add an autoload singleton to the project | `name`, `script_path` |
 
 ### Editor Control
 
-| Tool | Description |
-|------|-------------|
-| `godot_launch_editor` | Launch the Godot editor for a project |
-| `godot_editor_status` | Get editor connection status and open scenes |
-| `godot_open_scene` | Open a scene file in the editor |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_launch_editor` | Launch the Godot editor for a project | `project_path` |
+| `godot_editor_status` | Get editor connection status, open scenes, playing state | — |
+| `godot_open_scene` | Open a scene file in the editor | `scene_path` |
 
 ### Scene Editing (file-based, no editor required)
 
-| Tool | Description |
-|------|-------------|
-| `godot_parse_scene` | Parse a `.tscn` file to JSON |
-| `godot_create_scene` | Create a new `.tscn` file with a root node |
-| `godot_add_node_to_file` | Add a node to a `.tscn` file |
-| `godot_set_property_in_file` | Set a node property in a `.tscn` file |
-| `godot_load_sprite_in_file` | Set a Sprite2D texture resource |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_parse_scene` | Parse a `.tscn` file to JSON | `scene_path` |
+| `godot_create_scene` | Create a new `.tscn` file with a root node | `root_node_type`, `root_node_name` |
+| `godot_add_node_to_file` | Add a node to a `.tscn` file | `node_type`, `node_name`, `parent_path`, `properties` |
+| `godot_set_property_in_file` | Set a node property in a `.tscn` file | `node_path`, `property`, `value` |
+| `godot_load_sprite_in_file` | Set a Sprite2D texture resource | `node_path`, `texture_path` |
 
 ### Scene Editing (live editor, requires plugin)
 
-| Tool | Description |
-|------|-------------|
-| `godot_get_scene_tree` | Get the full scene tree of the current scene |
-| `godot_get_selected_nodes` | Get the currently selected nodes |
-| `godot_get_node_properties` | Get all properties of a node by path |
-| `godot_add_node` | Add a node via the live editor |
-| `godot_remove_node` | Remove a node via the live editor |
-| `godot_reparent_node` | Move a node to a new parent |
-| `godot_set_property` | Set a node property via the live editor |
-| `godot_save_scene` | Save the current scene |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_get_scene_tree` | Get the scene tree of the current scene | `max_depth`, `type_filter` (e.g. `"Sprite2D"`) |
+| `godot_get_selected_nodes` | Get the currently selected nodes | — |
+| `godot_get_node_properties` | Get all properties of a node by path | `path` |
+| `godot_add_node` | Add a node via the live editor | `node_type`, `node_name`, `parent_path`, `properties` (JSON) |
+| `godot_remove_node` | Remove a node via the live editor | `path` |
+| `godot_reparent_node` | Move a node to a new parent | `path`, `new_parent` |
+| `godot_rename_node` | Rename a node in the current scene | `path`, `new_name` |
+| `godot_duplicate_node` | Duplicate a node in the current scene | `path`, `new_name` (optional) |
+| `godot_move_node` | Reorder a node within its parent | `path`, `index` (0 = first child) |
+| `godot_set_property` | Set a node property via the live editor | `path`, `property`, `value` |
+| `godot_save_scene` | Save the current scene | — |
 
 ### Scripts
 
-| Tool | Description |
-|------|-------------|
-| `godot_validate_script` | Validate a GDScript file using `--check-only` |
-| `godot_get_current_script` | Get the open script, source, and cursor position |
-| `godot_get_open_scripts` | List all open scripts |
-| `godot_get_selected_code` | Get selected text in the script editor |
-| `godot_insert_code` | Insert code at the cursor position |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_validate_script` | Validate a GDScript file using `--check-only` | `script_path`, `include_warnings` |
+| `godot_get_current_script` | Get the open script, source, and cursor position | — |
+| `godot_get_open_scripts` | List all open scripts | — |
+| `godot_get_selected_code` | Get selected text in the script editor | — |
+| `godot_insert_code` | Insert code at the cursor position | `text` |
+| `godot_create_script` | Create a new GDScript and attach it to a node | `node_path`, `script_path`, `template` |
+| `godot_detach_script` | Remove the script attached to a node | `node_path` |
+| `godot_get_script_for_node` | Get the script path attached to a node | `path` |
+
+### Signals
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_list_signals` | List all signals exposed by a node | `path` |
+| `godot_connect_signal` | Connect a signal to a method on another node | `from_path`, `signal_name`, `to_path`, `method`, `flags` |
+| `godot_disconnect_signal` | Disconnect a signal connection | `from_path`, `signal_name`, `to_path`, `method` |
+| `godot_list_connections` | List all signal connections on a node | `path` |
+
+### Animation
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_list_animations` | List all animations in an AnimationPlayer | `path` |
+| `godot_get_animation` | Get detailed track and keyframe data | `path`, `animation_name` |
+| `godot_create_animation` | Create a new animation with tracks | `path`, `animation_name`, `length`, `loop_mode`, `tracks` (JSON) |
+
+### Files & Resources
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_create_folder` | Create a new folder in the project | `folder_path` |
+| `godot_list_directory` | List files and folders in a directory | `directory` |
+| `godot_delete_file` | Delete a file from the project | `path` |
+| `godot_rename_file` | Rename or move a file | `path`, `new_path` |
+| `godot_list_resources` | List resource files, optionally filtered by extension | `path`, `extensions` |
+| `godot_import_asset` | Reimport assets in the editor | `paths` (array) |
+| `godot_read_resource` | Read a resource's properties via the editor | `path` |
+| `godot_write_resource` | Write properties to a resource via the editor | `path`, `properties` |
+| `godot_get_uid` | Get the UID for a resource file (Godot 4.4+) | `file_path` |
+| `godot_update_uids` | Update all resource UIDs in the project | `project_path` |
+
+### Export
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_list_export_presets` | List all export presets in the project | `project_path` |
+| `godot_export_project` | Export using a configured preset | `preset`, `output_path`, `debug` |
+| `godot_export_mesh_library` | Export a scene as a MeshLibrary resource | `scene_path`, `output_path` |
 
 ### Run & Debug
 
-| Tool | Description |
-|------|-------------|
-| `godot_run_project` | Run the project in debug mode |
-| `godot_stop_project` | Stop the running project |
-| `godot_get_debug_output` | Get stdout/stderr from the running project |
-| `godot_run_scene` | Run a specific scene |
-| `godot_stop_scene` | Stop the running scene |
-| `godot_get_output` | Get scene output |
-| `godot_is_running` | Check if a scene is running |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_run_project` | Run the project in debug mode | `project_path`, `scene` |
+| `godot_stop_project` | Stop the running project | — |
+| `godot_get_debug_output` | Get stdout/stderr from the running project | — |
+| `godot_run_scene` | Run a scene (via editor bridge or process spawn) | `project_path`, `scene` |
+| `godot_stop_scene` | Stop the running scene | — |
+| `godot_get_output` | Get scene output with incremental polling | `since_line` (return lines after this index) |
+| `godot_is_running` | Check if a scene/project is running | — |
 
 ### Testing
 
 GDScript does not support custom annotations for tests. All frameworks use the `test_` method naming convention. Tests can be run headlessly without opening the editor.
 
-| Tool | Description |
-|------|-------------|
-| `godot_detect_test_framework` | Detect which test framework is installed (GUT, GdUnit4, or built-in) |
-| `godot_list_tests` | List all test files and their `test_` methods |
-| `godot_create_test` | Generate a test file skeleton for a source script |
-| `godot_run_tests` | Run tests headlessly and return pass/fail results |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_detect_test_framework` | Detect which test framework is installed (GUT, GdUnit4, or built-in) | `project_path` |
+| `godot_list_tests` | List all test files and their `test_` methods | `directory` |
+| `godot_create_test` | Generate a test file skeleton for a source script | `source_script`, `test_path`, `framework` |
+| `godot_run_tests` | Run tests headlessly and return pass/fail results | `path_filter`, `test_filter`, `test_method` (exact name match), `framework`, `timeout` |
 
 **Supported frameworks:**
 - **[GUT](https://github.com/bitwes/Gut)** — auto-detected via `addons/gut/`; tests extend `GutTest`
@@ -166,10 +228,33 @@ func test_player_starts_with_full_health() -> void:
     player.free()
 ```
 
-### Visuals & Resources
+### Screenshots
 
-| Tool | Description |
-|------|-------------|
-| `godot_take_screenshot` | Capture the editor viewport as a base64 PNG |
-| `godot_get_uid` | Get the UID for a resource file (Godot 4.4+) |
-| `godot_update_uids` | Update all resource UIDs in the project |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_take_screenshot` | Capture the editor viewport as a base64 PNG | — |
+| `godot_take_game_screenshot` | Capture the running game window as a base64 PNG | — |
+
+### Debugger
+
+All debugger tools require the editor plugin and a running game paused at a breakpoint (except set/remove/list breakpoints).
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_set_breakpoint` | Set a breakpoint at a file and line | `file`, `line` |
+| `godot_remove_breakpoint` | Remove a breakpoint at a file and line | `file`, `line` |
+| `godot_list_breakpoints` | List all active breakpoints | — |
+| `godot_get_stack_trace` | Get the current stack trace when paused | — |
+| `godot_get_locals` | Get local variables when paused | — |
+| `godot_step_over` | Step over the current line | — |
+| `godot_step_into` | Step into the current function call | — |
+| `godot_step_out` | Step out of the current function | — |
+| `godot_continue` | Continue execution after a breakpoint pause | — |
+
+### Profiler
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_start_profiler` | Start capturing performance profiling data | — |
+| `godot_stop_profiler` | Stop profiling and return collected data | — |
+| `godot_get_profiler_data` | Get collected profiler frames without stopping | — |

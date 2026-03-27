@@ -30,6 +30,9 @@ export interface Connection {
   from: string;
   to: string;
   method: string;
+  flags?: number;
+  binds?: string;
+  unbinds?: number;
 }
 
 export interface TscnScene {
@@ -170,12 +173,16 @@ export class TscnParser {
           break;
         }
         case "connection": {
-          scene.connections.push({
+          const conn: Connection = {
             signal: attrs.signal || "",
             from: attrs.from || "",
             to: attrs.to || "",
             method: attrs.method || "",
-          });
+          };
+          if (attrs.flags) conn.flags = parseInt(attrs.flags, 10);
+          if (attrs.binds) conn.binds = attrs.binds;
+          if (attrs.unbinds) conn.unbinds = parseInt(attrs.unbinds, 10);
+          scene.connections.push(conn);
           break;
         }
       }
@@ -227,9 +234,12 @@ export class TscnParser {
 
     for (const conn of scene.connections) {
       lines.push("");
-      lines.push(
-        `[connection signal="${conn.signal}" from="${conn.from}" to="${conn.to}" method="${conn.method}"]`
-      );
+      let connLine = `[connection signal="${conn.signal}" from="${conn.from}" to="${conn.to}" method="${conn.method}"`;
+      if (conn.flags !== undefined) connLine += ` flags=${conn.flags}`;
+      if (conn.binds !== undefined) connLine += ` binds=${conn.binds}`;
+      if (conn.unbinds !== undefined) connLine += ` unbinds=${conn.unbinds}`;
+      connLine += "]";
+      lines.push(connLine);
     }
 
     lines.push("");
@@ -358,6 +368,32 @@ export class TscnParser {
         },
       ],
       connections: [],
+    };
+  }
+
+  addConnection(
+    scene: TscnScene,
+    conn: Connection
+  ): TscnScene {
+    return {
+      ...scene,
+      connections: [...scene.connections, conn],
+    };
+  }
+
+  removeConnection(
+    scene: TscnScene,
+    signal: string,
+    from: string,
+    to: string,
+    method: string
+  ): TscnScene {
+    return {
+      ...scene,
+      connections: scene.connections.filter(
+        (c) =>
+          !(c.signal === signal && c.from === from && c.to === to && c.method === method)
+      ),
     };
   }
 

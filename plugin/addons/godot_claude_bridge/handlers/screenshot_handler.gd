@@ -29,3 +29,18 @@ func capture_viewport(editor_interface: EditorInterface) -> Dictionary:
 		"width": image.get_width(),
 		"height": image.get_height()
 	}
+
+
+func capture_game(_ei: EditorInterface) -> Dictionary:
+	var img: Image = DisplayServer.screen_get_image(0)
+	if img == null or img.is_empty():
+		return {"error": "Could not capture screen. Make sure the game is running."}
+	var png_bytes := img.save_png_to_buffer()
+	var b64 := Marshalls.raw_to_base64(png_bytes)
+	return {
+		"success": true,
+		"format": "png",
+		"data": b64,
+		"width": img.get_width(),
+		"height": img.get_height()
+	}

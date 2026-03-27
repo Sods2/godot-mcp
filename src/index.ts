@@ -7,6 +7,8 @@ import {
   listProjects,
   getProjectInfo,
   getGodotVersion as getGodotVersionTool,
+  getAutoloads,
+  addAutoload,
 } from "./tools/project-tools.js";
 import { getUid, updateProjectUids } from "./tools/uid-tools.js";
 import { bridge } from "./connection.js";
@@ -17,6 +19,11 @@ import { registerSceneTools } from "./tools/scene-tools.js";
 import { registerRunTools } from "./tools/run-tools.js";
 import { registerFileTools } from "./tools/file-tools.js";
 import { registerTestTools } from "./tools/test-tools.js";
+import { registerSignalTools } from "./tools/signal-tools.js";
+import { registerAnimationTools } from "./tools/animation-tools.js";
+import { registerExportTools } from "./tools/export-tools.js";
+import { registerDebugTools } from "./tools/debug-tools.js";
+import { registerProfilerTools } from "./tools/profiler-tools.js";
 
 const server = new McpServer({
   name: "godot-claude-mcp",
@@ -58,10 +65,23 @@ server.tool(
       .boolean()
       .optional()
       .describe("Scan subdirectories recursively (default: false)"),
+    sort_by: z
+      .enum(["name", "path", "modified"])
+      .optional()
+      .describe("Sort results by name, path, or modification time"),
+    godot_version: z
+      .string()
+      .optional()
+      .describe("Filter to projects targeting this Godot version (e.g. '4.4')"),
   },
-  async ({ directory, recursive }) => {
+  async ({ directory, recursive, sort_by, godot_version }) => {
     try {
-      const projects = await listProjects(directory, recursive ?? false);
+      const projects = await listProjects(
+        directory,
+        recursive ?? false,
+        sort_by,
+        godot_version
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(projects, null, 2) }],
       };
@@ -260,13 +280,71 @@ server.tool(
 registerEditorTools(server, bridge);
 registerScriptTools(server, bridge);
 registerScreenshotTools(server, bridge);
+registerSignalTools(server, bridge);
+registerAnimationTools(server, bridge);
+registerDebugTools(server, bridge);
+registerProfilerTools(server, bridge);
 
 // --- Hybrid tools (plugin + file fallback) ---
 
 registerSceneTools(server, bridge);
-registerFileTools(server, godotPath);
+registerFileTools(server, bridge, godotPath);
 registerRunTools(server, processManager, bridge, godotPath);
 registerTestTools(server, godotPath);
+registerExportTools(server, godotPath);
+
+// --- Autoload tools ---
+
+server.tool(
+  "godot_get_autoloads",
+  "List all autoload singletons configured in a Godot project",
+  {
+    project_path: z.string().describe("Path to the Godot project directory"),
+  },
+  async ({ project_path }) => {
+    try {
+      const autoloads = await getAutoloads(project_path);
+      return {
+        content: [{ type: "text", text: JSON.stringify(autoloads, null, 2) }],
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "godot_add_autoload",
+  "Add an autoload singleton to a Godot project",
+  {
+    project_path: z.string().describe("Path to the Godot project directory"),
+    name: z.string().describe("Autoload name (e.g. 'GameManager')"),
+    script_path: z
+      .string()
+      .describe("res:// path to the script (e.g. 'res://src/game_manager.gd')"),
+  },
+  async ({ project_path, name, script_path }) => {
+    try {
+      await addAutoload(project_path, name, script_path);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Added autoload "${name}" -> ${script_path}`,
+          },
+        ],
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  }
+);
 
 // --- Start server ---
 

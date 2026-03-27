@@ -1,7 +1,8 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { getGodotVersion as getVersion } from "../godot-path.js";
+import { parseProjectConfig, serializeProjectConfig } from "../parsers/project-parser.js";
 
 function expandPath(p: string): string {
   if (p.startsWith("~")) {
@@ -27,7 +28,9 @@ export interface ProjectInfo {
 
 export async function listProjects(
   directory: string,
-  recursive: boolean = false
+  recursive: boolean = false,
+  sortBy?: "name" | "path" | "modified",
+  godotVersionFilter?: string
 ): Promise<Array<{ path: string; name: string }>> {
   const dir = expandPath(directory);
   const results: Array<{ path: string; name: string }> = [];
@@ -77,6 +80,52 @@ export async function listProjects(
   }
 
   await scan(dir, 0);
+
+  if (godotVersionFilter) {
+    const filtered: Array<{ path: string; name: string }> = [];
+    for (const project of results) {
+      try {
+        const content = await readFile(
+          path.join(project.path, "project.godot"),
+          "utf-8"
+        );
+        const featuresMatch = content.match(
+          /config\/features=PackedStringArray\(([^)]+)\)/
+        );
+        if (featuresMatch) {
+          const versionMatch = featuresMatch[1].match(/"(\d+\.\d+[^"]*)"/);
+          if (versionMatch && versionMatch[1].includes(godotVersionFilter)) {
+            filtered.push(project);
+          }
+        }
+      } catch {
+        // skip projects we can't read
+      }
+    }
+    results.length = 0;
+    results.push(...filtered);
+  }
+
+  if (sortBy === "name") {
+    results.sort((a, b) => a.name.localeCompare(b.name));
+  } else if (sortBy === "path") {
+    results.sort((a, b) => a.path.localeCompare(b.path));
+  } else if (sortBy === "modified") {
+    const withMtime = await Promise.all(
+      results.map(async (p) => {
+        try {
+          const s = await stat(path.join(p.path, "project.godot"));
+          return { ...p, mtime: s.mtime.getTime() };
+        } catch {
+          return { ...p, mtime: 0 };
+        }
+      })
+    );
+    withMtime.sort((a, b) => b.mtime - a.mtime);
+    results.length = 0;
+    results.push(...withMtime.map(({ mtime: _, ...rest }) => rest));
+  }
+
   return results;
 }
 
@@ -191,4 +240,40 @@ export async function getProjectInfo(
 
 export async function getGodotVersion(godotPath: string): Promise<string> {
   return getVersion(godotPath);
+}
+
+export async function getAutoloads(
+  projectPath: string
+): Promise<Array<{ name: string; path: string; enabled: boolean }>> {
+  const dir = projectPath.startsWith("~")
+    ? path.join(os.homedir(), projectPath.slice(1))
+    : projectPath;
+  const projectFile = path.join(dir, "project.godot");
+  const content = await readFile(projectFile, "utf-8");
+  const config = parseProjectConfig(content);
+  const autoloadSection = config.rawSections["autoload"] ?? {};
+  return Object.entries(autoloadSection).map(([name, value]) => {
+    const enabled = value.startsWith("*");
+    const scriptPath = enabled ? value.slice(1) : value;
+    return { name, path: scriptPath.replace(/^"(.*)"$/, "$1"), enabled };
+  });
+}
+
+export async function addAutoload(
+  projectPath: string,
+  name: string,
+  scriptPath: string
+): Promise<void> {
+  const dir = projectPath.startsWith("~")
+    ? path.join(os.homedir(), projectPath.slice(1))
+    : projectPath;
+  const projectFile = path.join(dir, "project.godot");
+  const content = await readFile(projectFile, "utf-8");
+  const config = parseProjectConfig(content);
+  if (!config.rawSections["autoload"]) {
+    config.rawSections["autoload"] = {};
+  }
+  config.rawSections["autoload"][name] = `"*${scriptPath}"`;
+  const newContent = serializeProjectConfig(config.rawSections);
+  await writeFile(projectFile, newContent, "utf-8");
 }

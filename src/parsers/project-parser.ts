@@ -84,3 +84,17 @@ export function parseProjectConfig(content: string): GodotProjectConfig {
     rawSections,
   };
 }
+
+export function serializeProjectConfig(
+  rawSections: Record<string, Record<string, string>>
+): string {
+  const lines: string[] = [];
+  for (const [section, entries] of Object.entries(rawSections)) {
+    lines.push(`[${section}]`);
+    for (const [key, value] of Object.entries(entries)) {
+      lines.push(`${key}=${value}`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}

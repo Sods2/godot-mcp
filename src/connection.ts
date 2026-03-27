@@ -8,7 +8,7 @@ const DEFAULT_HOST = "127.0.0.1";
 const REQUEST_TIMEOUT_MS = 10000;
 
 interface PendingRequest {
-  resolve: (value: unknown) => void;
+  resolve: (value: any) => void;
   reject: (reason: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -36,7 +36,7 @@ export class BridgeConnection {
     return this.socket !== null && !this.socket.destroyed;
   }
 
-  async send(method: string, params: unknown = {}): Promise<unknown> {
+  async send<T = unknown>(method: string, params: unknown = {}): Promise<T> {
     if (!this.connected) {
       throw new Error(
         "EditorPlugin not connected (is godot_claude_bridge addon enabled in your project?)"

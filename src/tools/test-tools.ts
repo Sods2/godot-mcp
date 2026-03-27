@@ -464,6 +464,10 @@ export function registerTestTools(
         .string()
         .optional()
         .describe("Filter tests by method name substring (built-in runner only)"),
+      test_method: z
+        .string()
+        .optional()
+        .describe("Run only this specific test method (exact name match)"),
       framework: z
         .enum(["gut", "gdunit4", "builtin"])
         .optional()
@@ -473,7 +477,7 @@ export function registerTestTools(
         .optional()
         .describe("Timeout in seconds (default: 60)"),
     },
-    async ({ project_path, path_filter, test_filter, framework, timeout }) => {
+    async ({ project_path, path_filter, test_filter, test_method, framework, timeout }) => {
       try {
         const gp = await godotPath();
         const proj = expandPath(project_path);
@@ -497,6 +501,7 @@ export function registerTestTools(
             "-glog=2",
           ];
           if (test_filter) args.push(`-gtest=${test_filter}`);
+          if (test_method) args.push(`-gtest=${test_method}`);
         } else if (fw === "gdunit4") {
           const target = path_filter ?? detected.test_directories[0] ?? "res://test";
           args = [
@@ -511,6 +516,7 @@ export function registerTestTools(
           const testDir = path_filter ?? detected.test_directories[0] ?? "res://tests";
           const userArgs = [`--test-dir=${testDir}`];
           if (test_filter) userArgs.push(`--test-filter=${test_filter}`);
+          if (test_method) userArgs.push(`--test-method=${test_method}`);
           args = [
             "--headless",
             "--path", proj,
