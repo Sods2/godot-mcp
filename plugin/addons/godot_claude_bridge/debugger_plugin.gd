@@ -21,11 +21,20 @@ func _setup_session(session_id: int) -> void:
 	session.breaked.connect(_on_session_breaked)
 	session.continued.connect(_on_session_continued)
 
+func _has_capture(capture: String) -> bool:
+	match capture:
+		"output", "stack_dump", "stack_frame_vars", "debug", "claude_bridge", "servers":
+			return true
+	return false
+
 func _on_session_started(session_id: int) -> void:
 	_is_paused = false
 	_stack_frames = []
 	_locals = []
 	_output_lines.clear()
+	# Apply any pre-set breakpoints to the new session
+	for bp in _breakpoints:
+		_active_session.set_breakpoint(bp.file, bp.line, true)
 
 func _on_session_stopped(session_id: int) -> void:
 	_is_paused = false
@@ -69,9 +78,19 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 		return false
 
 	# Game print() output
+	# data format varies by Godot version: [PackedStringArray, PackedInt32Array] or interleaved
 	if message == "output":
-		for item in data:
-			_output_lines.append(str(item))
+		if data.size() >= 1 and data[0] is Array:
+			for text in data[0]:
+				var line := str(text).strip_edges()
+				if line != "":
+					_output_lines.append(line)
+		else:
+			for item in data:
+				if item is String:
+					var line := item.strip_edges()
+					if line != "":
+						_output_lines.append(line)
 		return false
 
 	# Legacy custom messages (kept for backwards compatibility)

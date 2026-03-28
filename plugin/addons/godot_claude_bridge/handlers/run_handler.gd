@@ -8,10 +8,16 @@ func play(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var scene_path: String = params.get("scene", "")
 	_output_lines.clear()
 	if scene_path != "":
+		if not FileAccess.file_exists(scene_path):
+			return {"error": "Scene file not found: " + scene_path}
+		if not (scene_path.ends_with(".tscn") or scene_path.ends_with(".scn")):
+			return {"error": "Not a scene file: " + scene_path}
 		editor_interface.play_custom_scene(scene_path)
 	else:
+		if editor_interface.get_edited_scene_root() == null:
+			return {"error": "No scene is currently open — open a scene or specify a scene path"}
 		editor_interface.play_current_scene()
-	return {"success": true}
+	return {"success": true, "note": "Scene launch requested. Use godot_is_running to verify it started."}
 
 func stop(editor_interface: EditorInterface) -> Dictionary:
 	editor_interface.stop_playing_scene()

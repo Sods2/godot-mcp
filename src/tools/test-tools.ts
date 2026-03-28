@@ -136,17 +136,43 @@ function parseGutOutput(output: string): Omit<RunResults, "framework" | "raw_out
   let errors = 0;
   let skipped = 0;
   let duration_ms = 0;
+  let currentSuite = "";
 
   for (const line of output.split("\n")) {
-    // Individual test result lines (GUT 9.x): "   [PASS]  test_something" or "   [FAIL]  test_something"
+    // Track current suite from "Running: test_player.gd" or "Script: res://..."
+    const suiteMatch = line.match(/^\s*(?:Running|Script):\s*(.+\.gd)/i);
+    if (suiteMatch) {
+      currentSuite = suiteMatch[1];
+      continue;
+    }
+
+    // GUT 9.x format: "  - test_something: PASSED" or "  - test_something: FAILED"
+    const dashResult = line.match(/^\s*-\s+(test_\w+)\s*:\s*(PASSED|FAILED|PENDING)/i);
+    if (dashResult) {
+      const s = dashResult[2].toUpperCase();
+      const status: TestResult["status"] = s === "PASSED" ? "passed" : s === "PENDING" ? "skipped" : "failed";
+      tests.push({ name: dashResult[1], suite: currentSuite, status });
+      continue;
+    }
+
+    // Alternate bracket format: "[PASS]  test_something" or "[FAIL]  test_something"
     const passLine = line.match(/\[PASS\]\s+(test_\w+)/);
     if (passLine) {
-      tests.push({ name: passLine[1], suite: "", status: "passed" });
+      tests.push({ name: passLine[1], suite: currentSuite, status: "passed" });
       continue;
     }
     const failLine = line.match(/\[FAIL\]\s+(test_\w+)/);
     if (failLine) {
-      tests.push({ name: failLine[1], suite: "", status: "failed" });
+      tests.push({ name: failLine[1], suite: currentSuite, status: "failed" });
+      continue;
+    }
+
+    // Inline summary: "Passed:  2  Failed:  1  Errors:  0  Warnings:  0  Skipped:  0"
+    if (/Passed:/i.test(line) && /Failed:/i.test(line)) {
+      const pm = line.match(/Passed:\s*(\d+)/i); if (pm) passed = parseInt(pm[1]);
+      const fm = line.match(/Failed:\s*(\d+)/i); if (fm) failed = parseInt(fm[1]);
+      const em = line.match(/Errors:\s*(\d+)/i); if (em) errors = parseInt(em[1]);
+      const sm = line.match(/(?:Skipped|Pending):\s*(\d+)/i); if (sm) skipped = parseInt(sm[1]);
       continue;
     }
     // Per-line summary fields: "Passed:  40", "Failed:  0", etc.
@@ -156,7 +182,7 @@ function parseGutOutput(output: string): Omit<RunResults, "framework" | "raw_out
     if (failedLine) { failed = parseInt(failedLine[1]); continue; }
     const errorsLine = line.match(/^\s*Errors:\s*(\d+)/i);
     if (errorsLine) { errors = parseInt(errorsLine[1]); continue; }
-    const skippedLine = line.match(/^\s*Skipped:\s*(\d+)/i);
+    const skippedLine = line.match(/^\s*(?:Skipped|Pending):\s*(\d+)/i);
     if (skippedLine) { skipped = parseInt(skippedLine[1]); continue; }
     // Duration: "Elapsed:  1.37s" or "Total time: 0.42s"
     const timeMatch = line.match(/(?:Elapsed|Total time):\s*([\d.]+)s/i);

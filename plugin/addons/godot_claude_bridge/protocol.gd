@@ -6,14 +6,22 @@ extends RefCounted
 static func encode_response(id: Variant, result: Variant) -> PackedByteArray:
 	var msg := {"jsonrpc": "2.0", "id": id, "result": result}
 	var json_str := JSON.stringify(msg)
-	var header := "Content-Length: %d\r\n\r\n" % json_str.length()
-	return (header + json_str).to_utf8_buffer()
+	var body_bytes := json_str.to_utf8_buffer()
+	var header := "Content-Length: %d\r\n\r\n" % body_bytes.size()
+	var out := PackedByteArray()
+	out.append_array(header.to_ascii_buffer())
+	out.append_array(body_bytes)
+	return out
 
 static func encode_error(id: Variant, code: int, message: String) -> PackedByteArray:
 	var msg := {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
 	var json_str := JSON.stringify(msg)
-	var header := "Content-Length: %d\r\n\r\n" % json_str.length()
-	return (header + json_str).to_utf8_buffer()
+	var body_bytes := json_str.to_utf8_buffer()
+	var header := "Content-Length: %d\r\n\r\n" % body_bytes.size()
+	var out := PackedByteArray()
+	out.append_array(header.to_ascii_buffer())
+	out.append_array(body_bytes)
+	return out
 
 # Feed raw bytes, returns array of parsed JSON-RPC request dicts
 # Maintains internal buffer for partial reads
