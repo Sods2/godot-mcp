@@ -8,7 +8,7 @@ func play(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var scene_path: String = params.get("scene", "")
 	_output_lines.clear()
 	if scene_path != "":
-		editor_interface.play_scene(scene_path)
+		editor_interface.play_custom_scene(scene_path)
 	else:
 		editor_interface.play_current_scene()
 	return {"success": true}

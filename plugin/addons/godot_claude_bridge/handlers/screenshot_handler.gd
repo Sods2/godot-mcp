@@ -3,25 +3,18 @@ class_name ScreenshotHandler
 extends RefCounted
 
 func capture_viewport(editor_interface: EditorInterface) -> Dictionary:
-	# Get the editor's main viewport
-	var viewport := editor_interface.get_editor_main_screen()
+	# Capture the editor's rendered viewport using its texture
+	var base_control := editor_interface.get_base_control()
+	if base_control == null:
+		return {"error": "Could not get editor base control"}
+	var viewport := base_control.get_viewport()
 	if viewport == null:
-		return {"error": "No viewport available"}
-
-	# We can capture the main window's viewport
-	var image := DisplayServer.screen_get_image(0)
-	if image == null:
-		# Fallback: try to get from the current viewport
-		var main_viewport := editor_interface.get_base_control().get_viewport()
-		if main_viewport:
-			image = main_viewport.get_texture().get_image()
-
-	if image == null:
-		return {"error": "Could not capture screenshot"}
-
+		return {"error": "Could not get editor viewport"}
+	var image := viewport.get_texture().get_image()
+	if image == null or image.is_empty():
+		return {"error": "Could not capture viewport texture"}
 	var png_buffer := image.save_png_to_buffer()
 	var base64_str := Marshalls.raw_to_base64(png_buffer)
-
 	return {
 		"success": true,
 		"format": "png",
@@ -31,16 +24,48 @@ func capture_viewport(editor_interface: EditorInterface) -> Dictionary:
 	}
 
 
-func capture_game(_ei: EditorInterface) -> Dictionary:
-	var img: Image = DisplayServer.screen_get_image(0)
-	if img == null or img.is_empty():
-		return {"error": "Could not capture screen. Make sure the game is running."}
-	var png_bytes := img.save_png_to_buffer()
-	var b64 := Marshalls.raw_to_base64(png_bytes)
-	return {
-		"success": true,
-		"format": "png",
-		"data": b64,
-		"width": img.get_width(),
-		"height": img.get_height()
-	}
+func capture_game(editor_interface: EditorInterface) -> Dictionary:
+	# Try to find the embedded game SubViewport first
+	var main_screen := editor_interface.get_editor_main_screen()
+	if main_screen != null:
+		var game_vp := _find_subviewport(main_screen)
+		if game_vp != null:
+			var image := game_vp.get_texture().get_image()
+			if image != null and not image.is_empty():
+				var png_bytes := image.save_png_to_buffer()
+				return {
+					"success": true,
+					"format": "png",
+					"data": Marshalls.raw_to_base64(png_bytes),
+					"width": image.get_width(),
+					"height": image.get_height()
+				}
+
+	# Fallback: capture the full editor viewport
+	var base_control := editor_interface.get_base_control()
+	if base_control != null:
+		var viewport := base_control.get_viewport()
+		if viewport != null:
+			var image := viewport.get_texture().get_image()
+			if image != null and not image.is_empty():
+				var png_bytes := image.save_png_to_buffer()
+				return {
+					"success": true,
+					"format": "png",
+					"data": Marshalls.raw_to_base64(png_bytes),
+					"width": image.get_width(),
+					"height": image.get_height(),
+					"note": "Game SubViewport not found — captured full editor viewport"
+				}
+
+	return {"error": "Could not capture screenshot. Make sure the game is running."}
+
+
+func _find_subviewport(node: Node) -> SubViewport:
+	for child in node.get_children():
+		if child is SubViewport:
+			return child as SubViewport
+		var result := _find_subviewport(child)
+		if result != null:
+			return result
+	return null

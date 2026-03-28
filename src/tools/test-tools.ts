@@ -138,31 +138,35 @@ function parseGutOutput(output: string): Omit<RunResults, "framework" | "raw_out
   let duration_ms = 0;
 
   for (const line of output.split("\n")) {
-    // Individual test result lines: "    PASSED  test_something"
-    const passLine = line.match(/PASSED\s+(test_\w+)/);
+    // Individual test result lines (GUT 9.x): "   [PASS]  test_something" or "   [FAIL]  test_something"
+    const passLine = line.match(/\[PASS\]\s+(test_\w+)/);
     if (passLine) {
-      passed++;
       tests.push({ name: passLine[1], suite: "", status: "passed" });
       continue;
     }
-    const failLine = line.match(/FAILED\s+(test_\w+)/);
+    const failLine = line.match(/\[FAIL\]\s+(test_\w+)/);
     if (failLine) {
-      failed++;
       tests.push({ name: failLine[1], suite: "", status: "failed" });
       continue;
     }
-    // Summary line: "Passed:  5  Failed:  1  Errors:  0  Warnings:  0  Skipped:  0"
-    const summary = line.match(/Passed:\s*(\d+)\s+Failed:\s*(\d+)\s+Errors:\s*(\d+)/i);
-    if (summary) {
-      passed = parseInt(summary[1]);
-      failed = parseInt(summary[2]);
-      errors = parseInt(summary[3]);
-      const skipMatch = line.match(/Skipped:\s*(\d+)/i);
-      if (skipMatch) skipped = parseInt(skipMatch[1]);
-    }
-    // Duration: "Total time: 0.42s"
-    const timeMatch = line.match(/Total time:\s*([\d.]+)s/i);
-    if (timeMatch) duration_ms = Math.round(parseFloat(timeMatch[1]) * 1000);
+    // Per-line summary fields: "Passed:  40", "Failed:  0", etc.
+    const passedLine = line.match(/^\s*Passed:\s*(\d+)/i);
+    if (passedLine) { passed = parseInt(passedLine[1]); continue; }
+    const failedLine = line.match(/^\s*Failed:\s*(\d+)/i);
+    if (failedLine) { failed = parseInt(failedLine[1]); continue; }
+    const errorsLine = line.match(/^\s*Errors:\s*(\d+)/i);
+    if (errorsLine) { errors = parseInt(errorsLine[1]); continue; }
+    const skippedLine = line.match(/^\s*Skipped:\s*(\d+)/i);
+    if (skippedLine) { skipped = parseInt(skippedLine[1]); continue; }
+    // Duration: "Elapsed:  1.37s" or "Total time: 0.42s"
+    const timeMatch = line.match(/(?:Elapsed|Total time):\s*([\d.]+)s/i);
+    if (timeMatch) { duration_ms = Math.round(parseFloat(timeMatch[1]) * 1000); continue; }
+  }
+
+  // Fallback: if summary counts not found but individual test lines were parsed, derive from them
+  if (passed === 0 && failed === 0 && tests.length > 0) {
+    passed = tests.filter(t => t.status === "passed").length;
+    failed = tests.filter(t => t.status === "failed").length;
   }
 
   return { passed, failed, errors, skipped, duration_ms, tests };
@@ -487,6 +491,12 @@ export function registerTestTools(
         let raw = "";
 
         if (fw === "gut") {
+          if (test_filter) {
+            return {
+              content: [{ type: "text", text: "Error: test_filter is not supported for GUT. Use path_filter to run a specific test file (e.g. path_filter: \"res://tests/test_player.gd\"). test_filter is only supported with the built-in runner." }],
+              isError: true,
+            };
+          }
           const dir = path_filter ?? detected.test_directories[0] ?? "res://tests";
           args = [
             "--headless",
@@ -497,7 +507,6 @@ export function registerTestTools(
             "-gexit",
             "-glog=2",
           ];
-          if (test_filter) args.push(`-gtest=${test_filter}`);
           if (test_method) args.push(`-gtest=${test_method}`);
         } else if (fw === "gdunit4") {
           const target = path_filter ?? detected.test_directories[0] ?? "res://test";

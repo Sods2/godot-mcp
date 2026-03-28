@@ -41,8 +41,8 @@ func connect_signal(editor_interface: EditorInterface, params: Dictionary) -> Di
 	var callable = Callable(to_node, method_name)
 	var undo_redo = editor_interface.get_editor_undo_redo()
 	undo_redo.create_action("Connect Signal")
-	undo_redo.add_do_method(from_node, "connect", signal_name, callable, flags)
-	undo_redo.add_undo_method(from_node, "disconnect", signal_name, callable)
+	undo_redo.add_do_method(Callable(from_node, "connect").bind(signal_name, callable, flags))
+	undo_redo.add_undo_method(Callable(from_node, "disconnect").bind(signal_name, callable))
 	undo_redo.commit_action()
 	return {"success": true}
 
@@ -63,8 +63,8 @@ func disconnect_signal(editor_interface: EditorInterface, params: Dictionary) ->
 		return {"error": "Signal not connected"}
 	var undo_redo = editor_interface.get_editor_undo_redo()
 	undo_redo.create_action("Disconnect Signal")
-	undo_redo.add_do_method(from_node, "disconnect", signal_name, callable)
-	undo_redo.add_undo_method(from_node, "connect", signal_name, callable)
+	undo_redo.add_do_method(Callable(from_node, "disconnect").bind(signal_name, callable))
+	undo_redo.add_undo_method(Callable(from_node, "connect").bind(signal_name, callable))
 	undo_redo.commit_action()
 	return {"success": true}
 

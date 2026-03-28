@@ -12,17 +12,23 @@ func set_breakpoint(_ei: EditorInterface, params: Dictionary) -> Dictionary:
 	var line: int = params.get("line", 0)
 	if file.is_empty() or line <= 0:
 		return { "error": "file and line required" }
+	if not _debugger.has_active_session():
+		return { "error": "No active debug session — run the project first, then set breakpoints" }
 	_debugger.set_breakpoint_in_session(file, line, true)
 	return { "success": true, "file": file, "line": line }
 
 func remove_breakpoint(_ei: EditorInterface, params: Dictionary) -> Dictionary:
 	var file: String = params.get("file", "")
 	var line: int = params.get("line", 0)
+	if file.is_empty() or line <= 0:
+		return { "error": "file and line required" }
+	if not _debugger.has_active_session():
+		return { "error": "No active debug session — run the project first" }
 	_debugger.set_breakpoint_in_session(file, line, false)
 	return { "success": true }
 
 func list_breakpoints(_ei: EditorInterface, _params: Dictionary) -> Dictionary:
-	return { "breakpoints": [] }
+	return { "breakpoints": _debugger._breakpoints }
 
 func get_stack_trace(_ei: EditorInterface, _params: Dictionary) -> Dictionary:
 	if not _debugger.is_paused():

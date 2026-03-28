@@ -312,11 +312,12 @@ export function registerFileTools(
       } catch (e: unknown) {
         const err = e as Error & { stdout?: string; stderr?: string };
         const output = cleanOutput(((err.stdout || "") + "\n" + (err.stderr || "")).trim());
+        const hint = "\n\nNote: godot_validate_script uses --check-only which requires an exclusive project lock. If the Godot editor is already open with this project, close it first before validating.";
         return {
           content: [
             {
               type: "text",
-              text: output || `Error: ${err.message}`,
+              text: (output || `Error: ${err.message}`) + hint,
             },
           ],
           isError: true,

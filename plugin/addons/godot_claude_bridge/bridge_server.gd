@@ -17,6 +17,7 @@ var _signal_handler: SignalHandler
 var _animation_handler: AnimationHandler
 var _debug_handler: DebugHandler
 var _profiler_handler: ProfilerHandler
+var _debugger_ref: ClaudeBridgeDebugger = null
 
 func _ready() -> void:
 	_scene_handler = SceneHandler.new()
@@ -29,6 +30,7 @@ func _ready() -> void:
 
 func set_debugger(debugger: ClaudeBridgeDebugger) -> void:
 	_debug_handler = DebugHandler.new(debugger)
+	_debugger_ref = debugger
 
 func set_profiler_handler(debugger: ClaudeBridgeDebugger) -> void:
 	_profiler_handler = ProfilerHandler.new(debugger)
@@ -119,7 +121,13 @@ func _handle_message(msg: Dictionary) -> void:
 		"run.is_running":
 			result = _run_handler.is_running(editor_interface)
 		"run.get_output":
-			result = _run_handler.get_output(params)
+			if _debugger_ref != null:
+				var since_line: int = params.get("since_line", 0)
+				var all_lines := _debugger_ref.get_output_lines()
+				var output := all_lines.slice(since_line) if since_line > 0 and since_line < all_lines.size() else all_lines
+				result = {"output": output, "total_lines": all_lines.size()}
+			else:
+				result = _run_handler.get_output(params)
 		"screenshot.viewport":
 			result = _screenshot_handler.capture_viewport(editor_interface)
 		"scene.rename_node":

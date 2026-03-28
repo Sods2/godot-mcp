@@ -9,6 +9,7 @@ var _is_paused: bool = false
 var _active_session: EditorDebuggerSession = null
 var _profiler_data: Array = []  # Collected profiler frames
 var _profiler_active: bool = false
+var _output_lines: Array[String] = []  # Game print() output
 
 func _setup_session(session_id: int) -> void:
 	var session := get_session(session_id)
@@ -24,6 +25,7 @@ func _on_session_started(session_id: int) -> void:
 	_is_paused = false
 	_stack_frames = []
 	_locals = []
+	_output_lines.clear()
 
 func _on_session_stopped(session_id: int) -> void:
 	_is_paused = false
@@ -40,6 +42,39 @@ func _on_session_continued() -> void:
 	_locals = []
 
 func _capture(message: String, data: Array, session_id: int) -> bool:
+	# Native debugger: stack dump sent automatically when breaking
+	if message == "stack_dump":
+		_stack_frames = []
+		for frame in data:
+			if frame is Dictionary:
+				_stack_frames.append(frame)
+		# Auto-request locals for the top frame
+		if _active_session != null and not _stack_frames.is_empty():
+			_active_session.send_message("get_stack_frame_vars", [0])
+		return false  # Let built-in debugger handle it too
+
+	# Native debugger: locals response for a stack frame
+	if message == "stack_frame_vars":
+		_locals = []
+		# Format: [count, name0, value0, name1, value1, ...]
+		if data.size() > 0:
+			var count: int = int(data[0])
+			for i in range(count):
+				var ni: int = 1 + i * 2
+				if ni + 1 < data.size():
+					_locals.append({
+						"name": str(data[ni]),
+						"value": str(data[ni + 1])
+					})
+		return false
+
+	# Game print() output
+	if message == "output":
+		for item in data:
+			_output_lines.append(str(item))
+		return false
+
+	# Legacy custom messages (kept for backwards compatibility)
 	if message == "claude_bridge:stack_dump":
 		_stack_frames = []
 		for frame in data:
@@ -66,9 +101,29 @@ func get_locals() -> Array:
 func is_paused() -> bool:
 	return _is_paused
 
+func get_output_lines() -> Array:
+	return _output_lines.duplicate()
+
 func set_breakpoint_in_session(file: String, line: int, enabled: bool) -> void:
+	# Track breakpoints locally
+	if enabled:
+		var already := false
+		for bp in _breakpoints:
+			if bp.file == file and bp.line == line:
+				already = true
+				break
+		if not already:
+			_breakpoints.append({"file": file, "line": line})
+	else:
+		for i in range(_breakpoints.size() - 1, -1, -1):
+			if _breakpoints[i].file == file and _breakpoints[i].line == line:
+				_breakpoints.remove_at(i)
+
 	if _active_session != null:
 		_active_session.set_breakpoint(file, line, enabled)
+
+func has_active_session() -> bool:
+	return _active_session != null
 
 func send_debugger_command(command: String, args: Array = []) -> void:
 	if _active_session != null:
