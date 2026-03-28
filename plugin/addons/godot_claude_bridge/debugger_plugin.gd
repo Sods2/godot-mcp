@@ -78,12 +78,12 @@ func start_profiler() -> void:
 	_profiler_data = []
 	_profiler_active = true
 	if _active_session != null:
-		_active_session.toggle_profiler("servers", true, [], 1.0 / 60.0)
+		_active_session.toggle_profiler("servers", true, [])
 
 func stop_profiler() -> Array:
 	_profiler_active = false
 	if _active_session != null:
-		_active_session.toggle_profiler("servers", false, [], 0.0)
+		_active_session.toggle_profiler("servers", false, [])
 	return _profiler_data.duplicate()
 
 func get_profiler_data() -> Array:
