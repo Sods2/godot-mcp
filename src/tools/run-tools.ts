@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { BridgeConnection } from "../connection.js";
-import type { PlayResponse, StopResponse, GetOutputResponse, IsRunningResponse } from "../types/bridge-responses.js";
+import type { PlayResponse, StopResponse, IsRunningResponse } from "../types/bridge-responses.js";
 import type { ProcessManager } from "../process-manager.js";
 
 function textResult(text: string) {

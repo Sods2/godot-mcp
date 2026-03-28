@@ -179,8 +179,8 @@ function parseGdUnit4Output(output: string): Omit<RunResults, "framework" | "raw
   let passed = 0;
   let failed = 0;
   let errors = 0;
-  let skipped = 0;
-  let duration_ms = 0;
+  const skipped = 0;
+  const duration_ms = 0;
 
   for (const line of output.split("\n")) {
     // GdUnit4 format: "[PASSED] suite_name.test_method"
@@ -405,7 +405,7 @@ export function registerTestTools(
         const sourceFile = path.basename(sourceAbs, ".gd");
 
         // Extract public methods from source (non-underscore, non-lifecycle)
-        let sourceMethods: string[] = [];
+        const sourceMethods: string[] = [];
         try {
           const src = await readFile(sourceAbs, "utf-8");
           for (const line of src.split("\n")) {

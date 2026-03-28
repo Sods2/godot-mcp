@@ -6,7 +6,6 @@ import { ProcessManager } from "./process-manager.js";
 import {
   listProjects,
   getProjectInfo,
-  getGodotVersion as getGodotVersionTool,
   getAutoloads,
   addAutoload,
 } from "./tools/project-tools.js";

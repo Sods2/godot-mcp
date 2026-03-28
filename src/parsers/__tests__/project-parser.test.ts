@@ -72,7 +72,7 @@ config/name="Test"
   it("should unquote quoted values", () => {
     const content = `[application]
 config/name="Quoted Name"
-config/description="A \"quoted\" desc"
+config/description="A 'quoted' desc"
 `;
     const config = parseProjectConfig(content);
     expect(config.name).toBe("Quoted Name");

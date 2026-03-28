@@ -44,7 +44,7 @@ export function registerFileTools(
   server: McpServer,
   bridge: BridgeConnection,
   godotPath: () => Promise<string>,
-  projectPath?: string
+  _projectPath?: string
 ): void {
   server.tool(
     "godot_parse_scene",
