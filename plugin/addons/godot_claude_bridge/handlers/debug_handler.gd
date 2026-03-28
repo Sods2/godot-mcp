@@ -2,9 +2,9 @@
 class_name DebugHandler
 extends RefCounted
 
-var _debugger: ClaudeBridgeDebugger
+var _debugger
 
-func _init(debugger: ClaudeBridgeDebugger) -> void:
+func _init(debugger) -> void:
 	_debugger = debugger
 
 func set_breakpoint(_ei: EditorInterface, params: Dictionary) -> Dictionary:

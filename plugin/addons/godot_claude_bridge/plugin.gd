@@ -1,18 +1,21 @@
 @tool
 extends EditorPlugin
 
-var _bridge_server: BridgeServer
-var _debugger_plugin: ClaudeBridgeDebugger
+const _DebuggerScript = preload("res://addons/godot_claude_bridge/debugger_plugin.gd")
+const _BridgeServerScript = preload("res://addons/godot_claude_bridge/bridge_server.gd")
+
+var _bridge_server
+var _debugger_plugin
 
 func _enter_tree() -> void:
 	# Skip bridge in headless/export mode
 	if DisplayServer.get_name() == "headless":
 		return
 
-	_debugger_plugin = ClaudeBridgeDebugger.new()
+	_debugger_plugin = _DebuggerScript.new()
 	add_debugger_plugin(_debugger_plugin)
 
-	_bridge_server = BridgeServer.new()
+	_bridge_server = _BridgeServerScript.new()
 	_bridge_server.editor_interface = get_editor_interface()
 	add_child(_bridge_server)
 	_bridge_server.set_debugger(_debugger_plugin)

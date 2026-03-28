@@ -17,7 +17,7 @@ var _signal_handler: SignalHandler
 var _animation_handler: AnimationHandler
 var _debug_handler: DebugHandler
 var _profiler_handler: ProfilerHandler
-var _debugger_ref: ClaudeBridgeDebugger = null
+var _debugger_ref = null
 
 func _ready() -> void:
 	_scene_handler = SceneHandler.new()
