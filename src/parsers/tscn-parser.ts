@@ -284,17 +284,18 @@ export class TscnParser {
   }
 
   removeNode(scene: TscnScene, nodePath: string): TscnScene {
-    const target = this.getNodeByPath(scene, nodePath);
-    if (!target) {
+    const targetIdx = this.findNodeIndex(scene, nodePath);
+    if (targetIdx === -1) {
       throw new Error(`Node not found: ${nodePath}`);
     }
 
+    const resolvedPath = this.buildNodePath(scene.nodes[targetIdx], scene.nodes);
     const pathsToRemove = new Set<string>();
-    pathsToRemove.add(nodePath);
+    pathsToRemove.add(resolvedPath);
 
     for (const node of scene.nodes) {
       const np = this.buildNodePath(node, scene.nodes);
-      if (np.startsWith(nodePath + "/")) {
+      if (np.startsWith(resolvedPath + "/")) {
         pathsToRemove.add(np);
       }
     }
@@ -316,9 +317,7 @@ export class TscnParser {
     key: string,
     value: string
   ): TscnScene {
-    const nodeIndex = scene.nodes.findIndex(
-      (node) => this.buildNodePath(node, scene.nodes) === nodePath
-    );
+    const nodeIndex = this.findNodeIndex(scene, nodePath);
 
     if (nodeIndex === -1) {
       throw new Error(`Node not found: ${nodePath}`);
@@ -397,10 +396,25 @@ export class TscnParser {
     };
   }
 
-  getNodeByPath(scene: TscnScene, nodePath: string): SceneNode | undefined {
-    return scene.nodes.find(
+  private findNodeIndex(scene: TscnScene, nodePath: string): number {
+    let idx = scene.nodes.findIndex(
       (node) => this.buildNodePath(node, scene.nodes) === nodePath
     );
+    if (idx === -1) {
+      const root = scene.nodes.find((n) => n.parent === undefined);
+      if (root) {
+        const withRoot = `${root.name}/${nodePath}`;
+        idx = scene.nodes.findIndex(
+          (node) => this.buildNodePath(node, scene.nodes) === withRoot
+        );
+      }
+    }
+    return idx;
+  }
+
+  getNodeByPath(scene: TscnScene, nodePath: string): SceneNode | undefined {
+    const idx = this.findNodeIndex(scene, nodePath);
+    return idx === -1 ? undefined : scene.nodes[idx];
   }
 
   buildNodePath(node: SceneNode, allNodes: SceneNode[]): string {

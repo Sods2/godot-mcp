@@ -16,7 +16,12 @@ func list_signals(editor_interface: EditorInterface, params: Dictionary) -> Dict
 		for arg in sig.get("args", []):
 			args_list.append({"name": arg.get("name", ""), "type": type_string(arg.get("type", 0))})
 		signals_list.append({"name": sig.get("name", ""), "args": args_list})
-	return {"node": str(node.get_path()), "signals": signals_list}
+	var rel_path: String
+	if root != null and node != root:
+		rel_path = str(root.get_path_to(node))
+	else:
+		rel_path = "."
+	return {"node": rel_path, "signals": signals_list}
 
 func connect_signal(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var root = editor_interface.get_edited_scene_root()
@@ -75,11 +80,22 @@ func list_connections(editor_interface: EditorInterface, params: Dictionary) -> 
 	for sig in node.get_signal_list():
 		var sig_name: String = sig.get("name", "")
 		for conn in node.get_signal_connection_list(sig_name):
-			connections.append({
-				"signal": sig_name,
-				"from": str(node.get_path()),
-				"to": str(conn.get("callable", Callable()).get_object().get_path()) if conn.get("callable", Callable()).get_object() else "",
-				"method": conn.get("callable", Callable()).get_method() if conn.get("callable", Callable()).is_valid() else "",
-				"flags": conn.get("flags", 0)
-			})
+			var callable: Callable = conn.get("callable", Callable())
+			if not callable.is_valid():
+				continue
+			var target_obj = callable.get_object()
+			if target_obj == null:
+				continue
+			# Filter out editor-internal connections (target not owned by scene)
+			if target_obj is Node:
+				var target_node: Node = target_obj as Node
+				if target_node != root and target_node.owner != root:
+					continue
+				connections.append({
+					"signal": sig_name,
+					"from": str(root.get_path_to(node)),
+					"to": str(root.get_path_to(target_node)),
+					"method": callable.get_method(),
+					"flags": conn.get("flags", 0)
+				})
 	return {"connections": connections}

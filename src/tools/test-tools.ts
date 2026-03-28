@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expandPath, resolveProjectPath } from "../project-utils.js";
+import { cleanOutput } from "../output-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -523,10 +524,10 @@ export function registerTestTools(
 
         try {
           const { stdout, stderr } = await execFileAsync(gp, args, { timeout: timeoutMs });
-          raw = (stdout + "\n" + stderr).trim();
+          raw = cleanOutput((stdout + "\n" + stderr).trim());
         } catch (e: unknown) {
           const err = e as Error & { stdout?: string; stderr?: string };
-          raw = ((err.stdout ?? "") + "\n" + (err.stderr ?? "")).trim();
+          raw = cleanOutput(((err.stdout ?? "") + "\n" + (err.stderr ?? "")).trim());
           // A non-zero exit code from the test runner just means tests failed — don't throw
         }
 

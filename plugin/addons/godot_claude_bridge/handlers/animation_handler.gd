@@ -83,8 +83,10 @@ func create_animation(editor_interface: EditorInterface, params: Dictionary) -> 
 		anim.track_set_path(track_idx, track_data.get("path", ""))
 		for key_data in track_data.get("keys", []):
 			anim.track_insert_key(track_idx, key_data.get("time", 0.0), key_data.get("value", null))
-	var lib = player.get_animation_library("")
-	if not lib:
+	var lib: AnimationLibrary
+	if player.has_animation_library(""):
+		lib = player.get_animation_library("")
+	else:
 		lib = AnimationLibrary.new()
 		player.add_animation_library("", lib)
 	var undo_redo = editor_interface.get_editor_undo_redo()

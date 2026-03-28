@@ -20,13 +20,26 @@ export async function getUid(
   const fullPath = path.join(dir, filePath);
   const uidPath = fullPath + ".uid";
 
+  // Try .uid sidecar file first
   try {
     const content = await readFile(uidPath, "utf-8");
     const match = content.match(/uid:\/\/[a-z0-9]+/);
-    return match ? match[0] : null;
+    if (match) return match[0];
   } catch {
-    return null;
+    // no sidecar file, try inline header
   }
+
+  // Fallback: read UID from file header (.tscn, .tres, etc.)
+  try {
+    const content = await readFile(fullPath, "utf-8");
+    const firstLine = content.split("\n")[0];
+    const match = firstLine.match(/uid="(uid:\/\/[a-z0-9]+)"/);
+    if (match) return match[1];
+  } catch {
+    // file not readable
+  }
+
+  return null;
 }
 
 export async function updateProjectUids(

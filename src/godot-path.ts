@@ -12,6 +12,21 @@ const PLATFORM_PATHS: Record<string, string[]> = {
     "/Applications/Godot_v4.5-stable_macos.universal.app/Contents/MacOS/Godot",
     "/Applications/Godot_v4.4-stable_macos.universal.app/Contents/MacOS/Godot",
     "/Applications/Godot_v4.3-stable_macos.universal.app/Contents/MacOS/Godot",
+    path.join(os.homedir(), "Applications/Godot.app/Contents/MacOS/Godot"),
+    path.join(
+      os.homedir(),
+      "Applications/Godot_v4.5-stable_macos.universal.app/Contents/MacOS/Godot"
+    ),
+    path.join(
+      os.homedir(),
+      "Applications/Godot_v4.4-stable_macos.universal.app/Contents/MacOS/Godot"
+    ),
+    path.join(
+      os.homedir(),
+      "Applications/Godot_v4.3-stable_macos.universal.app/Contents/MacOS/Godot"
+    ),
+    "/opt/homebrew/bin/godot",
+    "/usr/local/bin/godot",
     path.join(
       os.homedir(),
       "Library/Application Support/Steam/steamapps/common/Godot Engine/Godot.app/Contents/MacOS/Godot"
@@ -20,12 +35,18 @@ const PLATFORM_PATHS: Record<string, string[]> = {
   win32: [
     "C:\\Program Files\\Godot\\Godot.exe",
     "C:\\Program Files\\Godot Engine\\Godot.exe",
+    path.join(os.homedir(), "scoop\\apps\\godot\\current\\Godot.exe"),
   ],
   linux: [
     "/usr/bin/godot",
     "/usr/local/bin/godot",
     "/snap/bin/godot",
     path.join(os.homedir(), ".local/bin/godot"),
+    "/opt/godot/godot",
+    path.join(
+      os.homedir(),
+      ".steam/steam/steamapps/common/Godot Engine/godot.x86_64"
+    ),
   ],
 };
 

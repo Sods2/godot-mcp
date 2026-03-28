@@ -87,12 +87,12 @@ export function registerEditorTools(
     "godot_get_node_properties",
     "Get properties of a node by its path in the scene tree",
     {
-      path: z.string().describe("Node path in the scene tree"),
+      node_path: z.string().describe("Node path in the scene tree"),
     },
-    async ({ path }) => {
+    async ({ node_path }) => {
       try {
         const result = await bridge.send<GetPropertiesResponse>("inspector.get_properties", {
-          path,
+          path: node_path,
         });
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -133,13 +133,13 @@ export function registerEditorTools(
     "godot_reparent_node",
     "Move a node to a new parent in the scene tree",
     {
-      path: z.string().describe("Current node path in the scene tree"),
+      node_path: z.string().describe("Current node path in the scene tree"),
       new_parent: z.string().describe("Path of the new parent node"),
     },
-    async ({ path, new_parent }) => {
+    async ({ node_path, new_parent }) => {
       try {
         const result = await bridge.send<ReparentNodeResponse>("scene.reparent_node", {
-          path,
+          path: node_path,
           new_parent,
         });
         return {
@@ -158,12 +158,12 @@ export function registerEditorTools(
     "godot_rename_node",
     "Rename a node in the current scene",
     {
-      path: z.string().describe("Node path in the scene tree"),
+      node_path: z.string().describe("Node path in the scene tree"),
       new_name: z.string().describe("New name for the node"),
     },
-    async ({ path, new_name }) => {
+    async ({ node_path, new_name }) => {
       try {
-        const result = await bridge.send<RenameNodeResponse>("scene.rename_node", { path, new_name });
+        const result = await bridge.send<RenameNodeResponse>("scene.rename_node", { path: node_path, new_name });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };
@@ -175,12 +175,12 @@ export function registerEditorTools(
     "godot_duplicate_node",
     "Duplicate a node in the current scene",
     {
-      path: z.string().describe("Node path to duplicate"),
+      node_path: z.string().describe("Node path to duplicate"),
       new_name: z.string().optional().describe("Name for the duplicated node (default: auto-generated)"),
     },
-    async ({ path, new_name }) => {
+    async ({ node_path, new_name }) => {
       try {
-        const result = await bridge.send<DuplicateNodeResponse>("scene.duplicate_node", { path, new_name });
+        const result = await bridge.send<DuplicateNodeResponse>("scene.duplicate_node", { path: node_path, new_name });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };
@@ -192,12 +192,12 @@ export function registerEditorTools(
     "godot_move_node",
     "Move a node to a different sibling index (reorder within parent)",
     {
-      path: z.string().describe("Node path to move"),
+      node_path: z.string().describe("Node path to move"),
       index: z.number().describe("Target sibling index (0 = first child)"),
     },
-    async ({ path, index }) => {
+    async ({ node_path, index }) => {
       try {
-        const result = await bridge.send<MoveNodeResponse>("scene.move_node", { path, index });
+        const result = await bridge.send<MoveNodeResponse>("scene.move_node", { path: node_path, index });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };

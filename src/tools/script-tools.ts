@@ -123,11 +123,11 @@ export function registerScriptTools(
     "godot_get_script_for_node",
     "Get the script path attached to a node",
     {
-      path: z.string().describe("Node path in the scene tree"),
+      node_path: z.string().describe("Node path in the scene tree"),
     },
-    async ({ path }) => {
+    async ({ node_path }) => {
       try {
-        const result = await bridge.send<{ script_path: string; class_name?: string } | { script: null }>("script.get_for_node", { path });
+        const result = await bridge.send<{ script_path: string; class_name?: string } | { script: null }>("script.get_for_node", { path: node_path });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };

@@ -87,7 +87,7 @@ describe("editor-tools", () => {
         properties: [{ name: "position", value: "Vector2(0, 0)" }],
       });
       const result = await mockServer.callTool("godot_get_node_properties", {
-        path: "Player",
+        node_path: "Player",
       });
       expect(result.content[0].text).toContain("position");
       expect(mockBridge._getCalls()[0].params).toEqual({ path: "Player" });
@@ -96,7 +96,7 @@ describe("editor-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("inspector.get_properties", new Error("Node not found"));
       const result = await mockServer.callTool("godot_get_node_properties", {
-        path: "NonExistent",
+        node_path: "NonExistent",
       });
       expect(result.isError).toBe(true);
     });
@@ -124,7 +124,7 @@ describe("editor-tools", () => {
   describe("godot_reparent_node", () => {
     it("sends scene.reparent_node with path and new_parent", async () => {
       await mockServer.callTool("godot_reparent_node", {
-        path: "Player/Sprite2D",
+        node_path: "Player/Sprite2D",
         new_parent: "Player/Body",
       });
       expect(mockBridge._getCalls()[0].method).toBe("scene.reparent_node");
@@ -137,7 +137,7 @@ describe("editor-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("scene.reparent_node", new Error("Invalid parent"));
       const result = await mockServer.callTool("godot_reparent_node", {
-        path: "A",
+        node_path: "A",
         new_parent: "B",
       });
       expect(result.isError).toBe(true);
@@ -147,7 +147,7 @@ describe("editor-tools", () => {
   describe("godot_rename_node", () => {
     it("sends scene.rename_node with path and new_name", async () => {
       await mockServer.callTool("godot_rename_node", {
-        path: "Player",
+        node_path: "Player",
         new_name: "Hero",
       });
       expect(mockBridge._getCalls()[0].method).toBe("scene.rename_node");
@@ -160,7 +160,7 @@ describe("editor-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("scene.rename_node", new Error("Name conflict"));
       const result = await mockServer.callTool("godot_rename_node", {
-        path: "A",
+        node_path: "A",
         new_name: "B",
       });
       expect(result.isError).toBe(true);
@@ -170,7 +170,7 @@ describe("editor-tools", () => {
   describe("godot_duplicate_node", () => {
     it("sends scene.duplicate_node with path and optional new_name", async () => {
       await mockServer.callTool("godot_duplicate_node", {
-        path: "Enemy",
+        node_path: "Enemy",
         new_name: "Enemy2",
       });
       expect(mockBridge._getCalls()[0].method).toBe("scene.duplicate_node");
@@ -182,7 +182,7 @@ describe("editor-tools", () => {
 
     it("returns error when bridge throws", async () => {
       mockBridge._setError("scene.duplicate_node", new Error("Failed"));
-      const result = await mockServer.callTool("godot_duplicate_node", { path: "A" });
+      const result = await mockServer.callTool("godot_duplicate_node", { node_path: "A" });
       expect(result.isError).toBe(true);
     });
   });
@@ -190,7 +190,7 @@ describe("editor-tools", () => {
   describe("godot_move_node", () => {
     it("sends scene.move_node with path and index", async () => {
       await mockServer.callTool("godot_move_node", {
-        path: "Player",
+        node_path: "Player",
         index: 0,
       });
       expect(mockBridge._getCalls()[0].method).toBe("scene.move_node");
@@ -200,7 +200,7 @@ describe("editor-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("scene.move_node", new Error("Invalid index"));
       const result = await mockServer.callTool("godot_move_node", {
-        path: "A",
+        node_path: "A",
         index: 99,
       });
       expect(result.isError).toBe(true);

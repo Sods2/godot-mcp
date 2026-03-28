@@ -12,6 +12,7 @@ npm run build
 # Install
 mkdir -p "$DEST"
 cp -r "$PROJECT_DIR/build" "$DEST/"
+cp -r "$PROJECT_DIR/scripts" "$DEST/"
 cp "$PROJECT_DIR/package.json" "$DEST/"
 cd "$DEST" && npm install --omit=dev
 
@@ -32,12 +33,18 @@ else
         "/Applications/Godot_v4.5-stable_macos.universal.app/Contents/MacOS/Godot" \
         "/Applications/Godot_v4.4-stable_macos.universal.app/Contents/MacOS/Godot" \
         "/Applications/Godot_v4.3-stable_macos.universal.app/Contents/MacOS/Godot" \
-        "$HOME/Applications/Godot.app/Contents/MacOS/Godot"; do
+        "$HOME/Applications/Godot.app/Contents/MacOS/Godot" \
+        "$HOME/Applications/Godot_v4.5-stable_macos.universal.app/Contents/MacOS/Godot" \
+        "$HOME/Applications/Godot_v4.4-stable_macos.universal.app/Contents/MacOS/Godot" \
+        "$HOME/Applications/Godot_v4.3-stable_macos.universal.app/Contents/MacOS/Godot" \
+        "/opt/homebrew/bin/godot" \
+        "/usr/local/bin/godot" \
+        "$HOME/Library/Application Support/Steam/steamapps/common/Godot Engine/Godot.app/Contents/MacOS/Godot"; do
         [ -x "$p" ] && DETECTED_GODOT="$p" && break
       done
       ;;
     Linux)
-      for p in /usr/bin/godot /usr/local/bin/godot /snap/bin/godot "$HOME/.local/bin/godot"; do
+      for p in /usr/bin/godot /usr/local/bin/godot /snap/bin/godot "$HOME/.local/bin/godot" /opt/godot/godot; do
         [ -x "$p" ] && DETECTED_GODOT="$p" && break
       done
       ;;

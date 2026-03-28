@@ -10,11 +10,11 @@ export function registerSignalTools(
     "godot_list_signals",
     "List all signals exposed by a node",
     {
-      path: z.string().describe("Node path in the scene tree (empty for root)"),
+      node_path: z.string().describe("Node path in the scene tree (empty for root)"),
     },
-    async ({ path }) => {
+    async ({ node_path }) => {
       try {
-        const result = await bridge.send<{ node: string; signals: Array<{ name: string; args: Array<{ name: string; type: string }> }> }>("signal.list", { path });
+        const result = await bridge.send<{ node: string; signals: Array<{ name: string; args: Array<{ name: string; type: string }> }> }>("signal.list", { path: node_path });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };
@@ -65,11 +65,11 @@ export function registerSignalTools(
     "godot_list_connections",
     "List all signal connections on a node",
     {
-      path: z.string().optional().describe("Node path (empty for root)"),
+      node_path: z.string().optional().describe("Node path (empty for root)"),
     },
-    async ({ path }) => {
+    async ({ node_path }) => {
       try {
-        const result = await bridge.send<{ connections: Array<{ signal: string; from: string; to: string; method: string; flags: number }> }>("signal.list_connections", { path: path ?? "" });
+        const result = await bridge.send<{ connections: Array<{ signal: string; from: string; to: string; method: string; flags: number }> }>("signal.list_connections", { path: node_path ?? "" });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };

@@ -147,7 +147,7 @@ describe("script-tools", () => {
         script_path: "res://player.gd",
       });
       const result = await mockServer.callTool("godot_get_script_for_node", {
-        path: "Player",
+        node_path: "Player",
       });
       expect(result.content[0].text).toContain("player.gd");
       expect(mockBridge._getCalls()[0].params).toEqual({ path: "Player" });
@@ -156,7 +156,7 @@ describe("script-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("script.get_for_node", new Error("Node not found"));
       const result = await mockServer.callTool("godot_get_script_for_node", {
-        path: "X",
+        node_path: "X",
       });
       expect(result.isError).toBe(true);
     });

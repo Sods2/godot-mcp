@@ -35,17 +35,25 @@ func get_locals(_ei: EditorInterface, _params: Dictionary) -> Dictionary:
 	return { "locals": _debugger.get_locals() }
 
 func step_over(_ei: EditorInterface, _params: Dictionary) -> Dictionary:
+	if not _debugger.is_paused():
+		return { "error": "not paused at breakpoint" }
 	_debugger.send_debugger_command("next", [])
 	return { "success": true }
 
 func step_into(_ei: EditorInterface, _params: Dictionary) -> Dictionary:
+	if not _debugger.is_paused():
+		return { "error": "not paused at breakpoint" }
 	_debugger.send_debugger_command("step", [])
 	return { "success": true }
 
 func step_out(_ei: EditorInterface, _params: Dictionary) -> Dictionary:
+	if not _debugger.is_paused():
+		return { "error": "not paused at breakpoint" }
 	_debugger.send_debugger_command("finish", [])
 	return { "success": true }
 
 func continue_execution(_ei: EditorInterface, _params: Dictionary) -> Dictionary:
+	if not _debugger.is_paused():
+		return { "error": "not paused at breakpoint" }
 	_debugger.send_debugger_command("continue", [])
 	return { "success": true }

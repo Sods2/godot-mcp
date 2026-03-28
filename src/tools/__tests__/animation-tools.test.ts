@@ -20,7 +20,7 @@ describe("animation-tools", () => {
         animations: [{ name: "idle", length: 1.0, track_count: 2 }],
       });
       const result = await mockServer.callTool("godot_list_animations", {
-        path: "AnimationPlayer",
+        node_path: "AnimationPlayer",
       });
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("idle");
@@ -31,7 +31,7 @@ describe("animation-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("animation.list", new Error("Node not AnimationPlayer"));
       const result = await mockServer.callTool("godot_list_animations", {
-        path: "Sprite2D",
+        node_path: "Sprite2D",
       });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Node not AnimationPlayer");
@@ -47,7 +47,7 @@ describe("animation-tools", () => {
         tracks: [],
       });
       const result = await mockServer.callTool("godot_get_animation", {
-        path: "AnimationPlayer",
+        node_path: "AnimationPlayer",
         animation_name: "walk",
       });
       expect(result.content[0].text).toContain('"walk"');
@@ -61,7 +61,7 @@ describe("animation-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("animation.get", new Error("Animation not found"));
       const result = await mockServer.callTool("godot_get_animation", {
-        path: "AnimationPlayer",
+        node_path: "AnimationPlayer",
         animation_name: "nonexistent",
       });
       expect(result.isError).toBe(true);
@@ -76,7 +76,7 @@ describe("animation-tools", () => {
         track_count: 0,
       });
       const result = await mockServer.callTool("godot_create_animation", {
-        path: "AnimationPlayer",
+        node_path: "AnimationPlayer",
         animation_name: "run",
         length: 1.0,
       });
@@ -92,7 +92,7 @@ describe("animation-tools", () => {
     it("parses tracks JSON and forwards with loop_mode", async () => {
       const tracks = JSON.stringify([{ path: "Sprite2D:position", keys: [] }]);
       await mockServer.callTool("godot_create_animation", {
-        path: "AnimationPlayer",
+        node_path: "AnimationPlayer",
         animation_name: "jump",
         length: 0.3,
         loop_mode: 2,
@@ -106,7 +106,7 @@ describe("animation-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("animation.create", new Error("Animation exists"));
       const result = await mockServer.callTool("godot_create_animation", {
-        path: "AnimationPlayer",
+        node_path: "AnimationPlayer",
         animation_name: "idle",
         length: 1.0,
       });

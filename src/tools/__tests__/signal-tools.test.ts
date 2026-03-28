@@ -20,7 +20,7 @@ describe("signal-tools", () => {
         signals: [{ name: "health_changed", args: [{ name: "new_health", type: "int" }] }],
       });
       const result = await mockServer.callTool("godot_list_signals", {
-        path: "Player",
+        node_path: "Player",
       });
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("health_changed");
@@ -31,7 +31,7 @@ describe("signal-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("signal.list", new Error("Node not found"));
       const result = await mockServer.callTool("godot_list_signals", {
-        path: "NonExistent",
+        node_path: "NonExistent",
       });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Node not found");
@@ -124,7 +124,7 @@ describe("signal-tools", () => {
     });
 
     it("sends path when provided", async () => {
-      await mockServer.callTool("godot_list_connections", { path: "Player" });
+      await mockServer.callTool("godot_list_connections", { node_path: "Player" });
       expect((mockBridge._getCalls()[0].params as Record<string, unknown>).path).toBe("Player");
     });
 

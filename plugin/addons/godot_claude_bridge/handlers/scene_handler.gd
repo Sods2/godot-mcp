@@ -10,32 +10,43 @@ func get_tree(editor_interface: EditorInterface, params: Dictionary) -> Dictiona
 	var type_filter: String = params.get("type_filter", "")
 	return {
 		"scene_path": root.scene_file_path,
-		"root": _describe_node(root, 0, max_depth, type_filter)
+		"root": _describe_node(root, 0, max_depth, type_filter, root)
 	}
 
-func _describe_node(node: Node, depth: int, max_depth: int, type_filter: String = "") -> Dictionary:
+func _describe_node(node: Node, depth: int, max_depth: int, type_filter: String = "", scene_root: Node = null) -> Dictionary:
+	var node_path: String
+	if scene_root == null or node == scene_root:
+		node_path = "."
+	else:
+		node_path = str(scene_root.get_path_to(node))
 	var result := {
 		"name": node.name,
 		"type": node.get_class(),
-		"path": str(node.get_path()),
+		"path": node_path,
 		"children": []
 	}
 	if depth < max_depth:
 		for child in node.get_children():
-			var child_result := _describe_node(child, depth + 1, max_depth, type_filter)
+			var child_result := _describe_node(child, depth + 1, max_depth, type_filter, scene_root)
 			if type_filter == "" or child.is_class(type_filter) or child_result["children"].size() > 0:
 				result["children"].append(child_result)
 	return result
 
 func get_selected(editor_interface: EditorInterface) -> Dictionary:
+	var root := editor_interface.get_edited_scene_root()
 	var selection := editor_interface.get_selection()
 	var selected := selection.get_selected_nodes()
 	var nodes: Array[Dictionary] = []
 	for node in selected:
+		var node_path: String
+		if root != null and node != root:
+			node_path = str(root.get_path_to(node))
+		else:
+			node_path = "."
 		nodes.append({
 			"name": node.name,
 			"type": node.get_class(),
-			"path": str(node.get_path())
+			"path": node_path
 		})
 	return {"selected": nodes}
 
@@ -72,7 +83,8 @@ func add_node(editor_interface: EditorInterface, params: Dictionary) -> Dictiona
 	undo_redo.add_undo_method(parent, "remove_child", new_node)
 	undo_redo.commit_action()
 
-	return {"success": true, "path": str(new_node.get_path())}
+	var rel_path: String = str(root.get_path_to(new_node))
+	return {"success": true, "path": rel_path}
 
 func remove_node(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var root := editor_interface.get_edited_scene_root()
@@ -116,7 +128,8 @@ func reparent_node(editor_interface: EditorInterface, params: Dictionary) -> Dic
 		return {"error": "New parent not found: " + new_parent_path}
 
 	node.reparent(new_parent)
-	return {"success": true, "new_path": str(node.get_path())}
+	var rel_path: String = str(root.get_path_to(node))
+	return {"success": true, "new_path": rel_path}
 
 func open_scene(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var scene_path: String = params.get("path", "")
@@ -147,7 +160,8 @@ func rename_node(editor_interface: EditorInterface, params: Dictionary) -> Dicti
 	undo_redo.add_undo_property(node, "name", old_name)
 	undo_redo.commit_action()
 
-	return {"success": true, "old_name": old_name, "new_name": new_name, "new_path": str(node.get_path())}
+	var rel_path: String = str(root.get_path_to(node))
+	return {"success": true, "old_name": old_name, "new_name": new_name, "new_path": rel_path}
 
 func duplicate_node(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var root := editor_interface.get_edited_scene_root()
@@ -173,7 +187,8 @@ func duplicate_node(editor_interface: EditorInterface, params: Dictionary) -> Di
 	undo_redo.add_undo_method(parent, "remove_child", dup)
 	undo_redo.commit_action()
 
-	return {"success": true, "path": str(dup.get_path())}
+	var rel_path: String = str(root.get_path_to(dup))
+	return {"success": true, "path": rel_path}
 
 func move_node(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var root := editor_interface.get_edited_scene_root()

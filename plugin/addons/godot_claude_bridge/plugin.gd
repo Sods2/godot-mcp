@@ -5,6 +5,10 @@ var _bridge_server: BridgeServer
 var _debugger_plugin: ClaudeBridgeDebugger
 
 func _enter_tree() -> void:
+	# Skip bridge in headless/export mode
+	if DisplayServer.get_name() == "headless":
+		return
+
 	_debugger_plugin = ClaudeBridgeDebugger.new()
 	add_debugger_plugin(_debugger_plugin)
 

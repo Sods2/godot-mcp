@@ -152,6 +152,12 @@ server.tool(
   },
   async ({ project_path, scene }) => {
     try {
+      if (bridge.connected) {
+        const result = await bridge.send("run.play", { scene: scene ?? "" });
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
       const projectDir = resolveProjectPath(project_path);
       const gp = await godotPath();
       await processManager.runProject(gp, projectDir, scene);
@@ -173,6 +179,12 @@ server.tool(
   {},
   async () => {
     try {
+      if (bridge.connected) {
+        const result = await bridge.send("run.stop", {});
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
       const result = await processManager.stopProject();
       return {
         content: [
@@ -206,24 +218,37 @@ server.tool(
   "Get stdout/stderr from the running Godot project",
   {},
   async () => {
-    const result = processManager.getDebugOutput();
-    const running = processManager.isRunning();
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              running,
-              output: result.output,
-              errors: result.errors,
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
+    try {
+      if (bridge.connected) {
+        const result = await bridge.send("run.get_output", {});
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+      const result = processManager.getDebugOutput();
+      const running = processManager.isRunning();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                running,
+                output: result.output,
+                errors: result.errors,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
   }
 );
 

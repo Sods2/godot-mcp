@@ -65,14 +65,14 @@ describe("scene-tools", () => {
 
     describe("godot_remove_node", () => {
       it("sends scene.remove_node with path", async () => {
-        await mockServer.callTool("godot_remove_node", { path: "Player" });
+        await mockServer.callTool("godot_remove_node", { node_path: "Player" });
         expect(mockBridge._getCalls()[0].method).toBe("scene.remove_node");
         expect(mockBridge._getCalls()[0].params).toEqual({ path: "Player" });
       });
 
       it("returns error when bridge throws", async () => {
         mockBridge._setError("scene.remove_node", new Error("Node not found"));
-        const result = await mockServer.callTool("godot_remove_node", { path: "X" });
+        const result = await mockServer.callTool("godot_remove_node", { node_path: "X" });
         expect(result.isError).toBe(true);
       });
     });
@@ -80,7 +80,7 @@ describe("scene-tools", () => {
     describe("godot_set_property", () => {
       it("sends inspector.set_property with path, property, and value", async () => {
         await mockServer.callTool("godot_set_property", {
-          path: "Player",
+          node_path: "Player",
           property: "position",
           value: { x: 100, y: 200 },
         });
@@ -93,7 +93,7 @@ describe("scene-tools", () => {
       it("returns error when bridge throws", async () => {
         mockBridge._setError("inspector.set_property", new Error("Invalid property"));
         const result = await mockServer.callTool("godot_set_property", {
-          path: "P",
+          node_path: "P",
           property: "bad",
           value: null,
         });

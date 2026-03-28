@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { expandPath, resolveProjectPath } from "../project-utils.js";
+import { cleanOutput } from "../output-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -108,7 +109,7 @@ export function registerExportTools(
         return {
           content: [{
             type: "text",
-            text: JSON.stringify({ preset, output_path, stdout: stdout.trim(), stderr: stderr.trim() }, null, 2),
+            text: JSON.stringify({ preset, output_path, stdout: cleanOutput(stdout.trim()), stderr: cleanOutput(stderr.trim()) }, null, 2),
           }],
         };
       } catch (e) {

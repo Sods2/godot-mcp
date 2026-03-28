@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { readFile, writeFile, mkdir, readdir, stat, unlink, rename } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, stat, unlink, rename, rm } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
@@ -8,6 +8,7 @@ import { TscnParser, type TscnScene } from "../parsers/tscn-parser.js";
 import type { BridgeConnection } from "../connection.js";
 import type { ImportAssetResponse, ReadResourceResponse, WriteResourceResponse } from "../types/bridge-responses.js";
 import { expandPath, resolveProjectPath } from "../project-utils.js";
+import { cleanOutput } from "../output-utils.js";
 
 const execFileAsync = promisify(execFile);
 const parser = new TscnParser();
@@ -298,23 +299,19 @@ export function registerFileTools(
           { timeout: 30000 }
         );
 
-        const output = (stdout + "\n" + stderr).trim();
-        const hasErrors = output.toLowerCase().includes("error");
+        const output = cleanOutput((stdout + "\n" + stderr).trim());
 
         return {
           content: [
             {
               type: "text",
-              text: hasErrors
-                ? `Validation errors:\n${output}`
-                : `Script is valid.\n${output}`,
+              text: `Script is valid.\n${output}`.trim(),
             },
           ],
-          isError: hasErrors,
         };
       } catch (e: unknown) {
         const err = e as Error & { stdout?: string; stderr?: string };
-        const output = ((err.stdout || "") + "\n" + (err.stderr || "")).trim();
+        const output = cleanOutput(((err.stdout || "") + "\n" + (err.stderr || "")).trim());
         return {
           content: [
             {
@@ -387,15 +384,20 @@ export function registerFileTools(
 
   server.tool(
     "godot_delete_file",
-    "Delete a file from the Godot project",
+    "Delete a file or folder from the Godot project",
     {
       project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
-      path: z.string().describe("res:// path to the file to delete"),
+      path: z.string().describe("res:// path to the file or folder to delete"),
     },
     async ({ project_path, path: resPath }) => {
       try {
         const absPath = resolveResPath(resolveProjectPath(project_path), resPath);
-        await unlink(absPath);
+        const fileStats = await stat(absPath);
+        if (fileStats.isDirectory()) {
+          await rm(absPath, { recursive: true });
+        } else {
+          await unlink(absPath);
+        }
         return {
           content: [{ type: "text", text: JSON.stringify({ success: true, path: resPath }) }],
         };

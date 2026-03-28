@@ -52,14 +52,14 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
     "godot_remove_node",
     "Remove a node from the current scene (requires editor plugin)",
     {
-      path: z.string().describe("Node path to remove (e.g. 'Player/Sprite2D')"),
+      node_path: z.string().describe("Node path to remove (e.g. 'Player/Sprite2D')"),
     },
-    async ({ path }) => {
+    async ({ node_path }) => {
       if (!bridge.connected) {
         return { ...textResult(NOT_CONNECTED_MSG), isError: true };
       }
       try {
-        const result = await bridge.send<RemoveNodeResponse>("scene.remove_node", { path });
+        const result = await bridge.send<RemoveNodeResponse>("scene.remove_node", { path: node_path });
         return textResult(JSON.stringify(result, null, 2));
       } catch (e) {
         return errorResult(e);
@@ -71,17 +71,17 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
     "godot_set_property",
     "Set a property on a node in the current scene (requires editor plugin)",
     {
-      path: z.string().describe("Node path (e.g. 'Player/Sprite2D')"),
+      node_path: z.string().describe("Node path (e.g. 'Player/Sprite2D')"),
       property: z.string().describe("Property name (e.g. 'position', 'texture')"),
       value: z.any().describe("Property value"),
     },
-    async ({ path, property, value }) => {
+    async ({ node_path, property, value }) => {
       if (!bridge.connected) {
         return { ...textResult(NOT_CONNECTED_MSG), isError: true };
       }
       try {
         const result = await bridge.send<SetPropertyResponse>("inspector.set_property", {
-          path,
+          path: node_path,
           property,
           value,
         });

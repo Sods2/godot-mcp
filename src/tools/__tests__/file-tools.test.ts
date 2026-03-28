@@ -174,10 +174,11 @@ describe("file-tools", () => {
     it("detects errors in output and sets isError", async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-          (cb as Function)(null, {
+          const err = Object.assign(new Error("Command failed"), {
             stdout: "",
             stderr: "ERROR: parse error at line 5",
           });
+          (cb as Function)(err);
           return {} as ReturnType<typeof execFile>;
         }
       );
@@ -186,7 +187,7 @@ describe("file-tools", () => {
         script_path: "res://bad.gd",
       });
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Validation errors");
+      expect(result.content[0].text).toContain("parse error at line 5");
     });
   });
 
