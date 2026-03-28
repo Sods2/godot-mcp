@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { BridgeConnection } from "../connection.js";
 import type { PlayResponse, StopResponse, IsRunningResponse } from "../types/bridge-responses.js";
 import type { ProcessManager } from "../process-manager.js";
+import { resolveProjectPath } from "../project-utils.js";
 
 function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -25,7 +26,7 @@ export function registerRunTools(
     "godot_run_scene",
     "Run a Godot project/scene in debug mode",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       scene: z.string().optional().describe("Specific scene to run (optional)"),
     },
     async ({ project_path, scene }) => {
@@ -39,7 +40,7 @@ export function registerRunTools(
       }
       try {
         const gp = await godotPath();
-        await processManager.runProject(gp, project_path, scene);
+        await processManager.runProject(gp, resolveProjectPath(project_path), scene);
         return textResult("Project running in debug mode (spawned process)");
       } catch (e) {
         return errorResult(e);

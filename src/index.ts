@@ -23,6 +23,7 @@ import { registerAnimationTools } from "./tools/animation-tools.js";
 import { registerExportTools } from "./tools/export-tools.js";
 import { registerDebugTools } from "./tools/debug-tools.js";
 import { registerProfilerTools } from "./tools/profiler-tools.js";
+import { resolveProjectPath } from "./project-utils.js";
 
 const server = new McpServer({
   name: "godot-claude-mcp",
@@ -97,12 +98,13 @@ server.tool(
   "godot_get_project_info",
   "Get metadata about a Godot project",
   {
-    project_path: z.string().describe("Path to the Godot project directory"),
+    project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
   },
   async ({ project_path }) => {
     try {
+      const projectDir = resolveProjectPath(project_path);
       const gp = await godotPath();
-      const info = await getProjectInfo(project_path, gp);
+      const info = await getProjectInfo(projectDir, gp);
       return {
         content: [{ type: "text", text: JSON.stringify(info, null, 2) }],
       };
@@ -119,12 +121,13 @@ server.tool(
   "godot_launch_editor",
   "Launch the Godot editor for a project",
   {
-    project_path: z.string().describe("Path to the Godot project directory"),
+    project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
   },
   async ({ project_path }) => {
     try {
+      const projectDir = resolveProjectPath(project_path);
       const gp = await godotPath();
-      await processManager.launchEditor(gp, project_path);
+      await processManager.launchEditor(gp, projectDir);
       return {
         content: [{ type: "text", text: "Godot editor launched" }],
       };
@@ -141,7 +144,7 @@ server.tool(
   "godot_run_project",
   "Run a Godot project in debug mode",
   {
-    project_path: z.string().describe("Path to the Godot project directory"),
+    project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
     scene: z
       .string()
       .optional()
@@ -149,8 +152,9 @@ server.tool(
   },
   async ({ project_path, scene }) => {
     try {
+      const projectDir = resolveProjectPath(project_path);
       const gp = await godotPath();
-      await processManager.runProject(gp, project_path, scene);
+      await processManager.runProject(gp, projectDir, scene);
       return {
         content: [{ type: "text", text: "Project running in debug mode" }],
       };
@@ -227,14 +231,15 @@ server.tool(
   "godot_get_uid",
   "Get the UID for a resource file (Godot 4.4+)",
   {
-    project_path: z.string().describe("Path to the Godot project directory"),
+    project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
     file_path: z
       .string()
       .describe("Relative path to the resource file within the project"),
   },
   async ({ project_path, file_path }) => {
     try {
-      const uid = await getUid(project_path, file_path);
+      const projectDir = resolveProjectPath(project_path);
+      const uid = await getUid(projectDir, file_path);
       if (uid) {
         return { content: [{ type: "text", text: uid }] };
       }
@@ -256,12 +261,13 @@ server.tool(
   "godot_update_uids",
   "Update all resource UIDs in a Godot project",
   {
-    project_path: z.string().describe("Path to the Godot project directory"),
+    project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
   },
   async ({ project_path }) => {
     try {
+      const projectDir = resolveProjectPath(project_path);
       const gp = await godotPath();
-      const message = await updateProjectUids(gp, project_path);
+      const message = await updateProjectUids(gp, projectDir);
       return {
         content: [{ type: "text", text: message }],
       };
@@ -298,11 +304,12 @@ server.tool(
   "godot_get_autoloads",
   "List all autoload singletons configured in a Godot project",
   {
-    project_path: z.string().describe("Path to the Godot project directory"),
+    project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
   },
   async ({ project_path }) => {
     try {
-      const autoloads = await getAutoloads(project_path);
+      const projectDir = resolveProjectPath(project_path);
+      const autoloads = await getAutoloads(projectDir);
       return {
         content: [{ type: "text", text: JSON.stringify(autoloads, null, 2) }],
       };
@@ -319,7 +326,7 @@ server.tool(
   "godot_add_autoload",
   "Add an autoload singleton to a Godot project",
   {
-    project_path: z.string().describe("Path to the Godot project directory"),
+    project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
     name: z.string().describe("Autoload name (e.g. 'GameManager')"),
     script_path: z
       .string()
@@ -327,7 +334,8 @@ server.tool(
   },
   async ({ project_path, name, script_path }) => {
     try {
-      await addAutoload(project_path, name, script_path);
+      const projectDir = resolveProjectPath(project_path);
+      await addAutoload(projectDir, name, script_path);
       return {
         content: [
           {

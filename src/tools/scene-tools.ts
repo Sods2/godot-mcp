@@ -22,7 +22,7 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
     "godot_add_node",
     "Add a node to the current scene (requires editor plugin)",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       scene_path: z.string().describe("Path to the scene file relative to project"),
       node_type: z.string().describe("Godot node type (e.g. Sprite2D, CharacterBody2D)"),
       node_name: z.string().describe("Name for the new node"),

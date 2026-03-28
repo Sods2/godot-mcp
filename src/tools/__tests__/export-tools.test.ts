@@ -43,7 +43,7 @@ describe("export-tools", () => {
 
   describe("godot_list_export_presets", () => {
     it("parses and returns export presets from cfg file", async () => {
-      vi.mocked(readFile).mockResolvedValue(SAMPLE_PRESETS as unknown as ArrayBuffer);
+      vi.mocked(readFile).mockResolvedValue(SAMPLE_PRESETS as unknown as Buffer);
       const result = await mockServer.callTool("godot_list_export_presets", {
         project_path: "/proj",
       });

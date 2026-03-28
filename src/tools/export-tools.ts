@@ -1,20 +1,13 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { expandPath, resolveProjectPath } from "../project-utils.js";
 
 const execFileAsync = promisify(execFile);
-
-function expandPath(p: string): string {
-  if (p.startsWith("~")) {
-    return path.join(os.homedir(), p.slice(1));
-  }
-  return p;
-}
 
 function getExportMeshLibraryScriptPath(): string {
   const dir = path.dirname(fileURLToPath(import.meta.url));
@@ -68,11 +61,12 @@ export function registerExportTools(
     "godot_list_export_presets",
     "List all export presets configured in the project",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
     },
     async ({ project_path }) => {
       try {
-        const presets = await parseExportPresets(project_path);
+        const projectDir = resolveProjectPath(project_path);
+        const presets = await parseExportPresets(projectDir);
         if (presets.length === 0) {
           return { content: [{ type: "text", text: "No export presets found. Configure them in Project > Export." }] };
         }
@@ -87,15 +81,16 @@ export function registerExportTools(
     "godot_export_project",
     "Export the project using a configured export preset",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       preset: z.string().describe("Name of the export preset to use"),
       output_path: z.string().describe("Output file path for the export"),
       debug: z.boolean().optional().describe("Export debug build (default: release)"),
     },
     async ({ project_path, preset, output_path, debug }) => {
       try {
+        const projectDir = resolveProjectPath(project_path);
         const gp = await godotPath();
-        const proj = expandPath(project_path);
+        const proj = projectDir;
         const flag = debug ? "--export-debug" : "--export-release";
         const args = ["--headless", "--path", proj, flag, preset, output_path];
         let stdout = "";
@@ -126,14 +121,15 @@ export function registerExportTools(
     "godot_export_mesh_library",
     "Export a scene as a MeshLibrary resource (for use with TileMap/GridMap)",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       scene_path: z.string().describe("res:// path to the scene containing MeshInstance3D nodes"),
       output_path: z.string().describe("res:// path for the output .meshlib file"),
     },
     async ({ project_path, scene_path, output_path }) => {
       try {
+        const projectDir = resolveProjectPath(project_path);
         const gp = await godotPath();
-        const proj = expandPath(project_path);
+        const proj = projectDir;
         const scriptPath = getExportMeshLibraryScriptPath();
         const args = [
           "--headless", "--path", proj,

@@ -54,8 +54,9 @@ describe("mcp-protocol", () => {
       arguments: {},
     });
     expect(response.content).toBeDefined();
-    expect(response.content[0].type).toBe("text");
-    const text = (response.content[0] as { type: "text"; text: string }).text;
+    const content = response.content as Array<{ type: string; text: string }>;
+    expect(content[0].type).toBe("text");
+    const text = content[0].text;
     expect(text).toContain("res://main.gd");
   });
 
@@ -83,7 +84,8 @@ describe("mcp-protocol", () => {
       name: "godot_editor_status",
       arguments: {},
     });
-    const text = (response.content[0] as { type: "text"; text: string }).text;
+    const content = response.content as Array<{ type: string; text: string }>;
+    const text = content[0].text;
     const data = JSON.parse(text);
     expect(data.connected).toBe(false);
     expect(mockBridge._getCalls()).toHaveLength(0);

@@ -2,17 +2,10 @@ import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
-import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { expandPath } from "../project-utils.js";
 
 const execFileAsync = promisify(execFile);
-
-function expandPath(p: string): string {
-  if (p.startsWith("~")) {
-    return path.join(os.homedir(), p.slice(1));
-  }
-  return p;
-}
 
 function getUidUpdaterPath(): string {
   const dir = path.dirname(fileURLToPath(import.meta.url));

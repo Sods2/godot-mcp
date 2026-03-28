@@ -1,15 +1,8 @@
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
 import { getGodotVersion as getVersion } from "../godot-path.js";
 import { parseProjectConfig, serializeProjectConfig } from "../parsers/project-parser.js";
-
-function expandPath(p: string): string {
-  if (p.startsWith("~")) {
-    return path.join(os.homedir(), p.slice(1));
-  }
-  return p;
-}
+import { expandPath } from "../project-utils.js";
 
 export interface ProjectInfo {
   name: string;
@@ -245,9 +238,7 @@ export async function getGodotVersion(godotPath: string): Promise<string> {
 export async function getAutoloads(
   projectPath: string
 ): Promise<Array<{ name: string; path: string; enabled: boolean }>> {
-  const dir = projectPath.startsWith("~")
-    ? path.join(os.homedir(), projectPath.slice(1))
-    : projectPath;
+  const dir = expandPath(projectPath);
   const projectFile = path.join(dir, "project.godot");
   const content = await readFile(projectFile, "utf-8");
   const config = parseProjectConfig(content);
@@ -264,9 +255,7 @@ export async function addAutoload(
   name: string,
   scriptPath: string
 ): Promise<void> {
-  const dir = projectPath.startsWith("~")
-    ? path.join(os.homedir(), projectPath.slice(1))
-    : projectPath;
+  const dir = expandPath(projectPath);
   const projectFile = path.join(dir, "project.godot");
   const content = await readFile(projectFile, "utf-8");
   const config = parseProjectConfig(content);

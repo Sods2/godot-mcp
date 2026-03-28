@@ -70,7 +70,22 @@ Create or update `.mcp.json` in your Claude project root:
 }
 ```
 
-> **`GODOT_PATH` is optional.** If omitted, the server will search for Godot in standard locations automatically. Set it explicitly if Godot is installed somewhere non-standard.
+> **Setting `GODOT_PATH`:** The install script auto-detects Godot and pre-fills this value. If it can't find Godot, or if you install to a custom location, set the path explicitly. The server checks `GODOT_PATH`, then `godot` on `$PATH`, then these standard locations:
+>
+> | Platform | Typical paths |
+> |----------|--------------|
+> | macOS | `/Applications/Godot.app/Contents/MacOS/Godot` |
+> | Linux | `/usr/bin/godot`, `~/.local/bin/godot` |
+> | Windows | `C:\Program Files\Godot\Godot.exe` |
+>
+> On macOS the executable is inside the `.app` bundle at `Godot.app/Contents/MacOS/Godot`.
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `GODOT_PATH` | Path to the Godot executable. Auto-detected if omitted (see above). |
+| `GODOT_PROJECT_PATH` | Default Godot project directory. When set, tools that require `project_path` will use this value if no explicit path is passed. The server also auto-detects by walking up from the current working directory looking for `project.godot`. |
 
 ### 3. Install the Godot editor plugin (optional, for live editor tools)
 

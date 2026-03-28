@@ -4,17 +4,10 @@ import { readFile, writeFile, mkdir, access, readdir, stat } from "node:fs/promi
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
-import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { expandPath, resolveProjectPath } from "../project-utils.js";
 
 const execFileAsync = promisify(execFile);
-
-function expandPath(p: string): string {
-  if (p.startsWith("~")) {
-    return path.join(os.homedir(), p.slice(1));
-  }
-  return p;
-}
 
 function resolveResPath(projectPath: string, resPath: string): string {
   const project = expandPath(projectPath);
@@ -311,11 +304,12 @@ export function registerTestTools(
     "godot_detect_test_framework",
     "Detect which GDScript test framework (GUT, GdUnit4, or built-in) is installed in a Godot project",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
     },
     async ({ project_path }) => {
       try {
-        const result = await detectFramework(project_path);
+        const projectDir = resolveProjectPath(project_path);
+        const result = await detectFramework(projectDir);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
@@ -332,7 +326,7 @@ export function registerTestTools(
     "godot_list_tests",
     "List all GDScript test files and their test methods in a Godot project",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       directory: z
         .string()
         .optional()
@@ -340,26 +334,26 @@ export function registerTestTools(
     },
     async ({ project_path, directory }) => {
       try {
-        const proj = expandPath(project_path);
+        const projectDir = resolveProjectPath(project_path);
         let scanDirs: string[];
 
         if (directory) {
           scanDirs = [directory];
         } else {
-          const detected = await detectFramework(project_path);
+          const detected = await detectFramework(projectDir);
           scanDirs = detected.test_directories;
         }
 
         const testFiles: Array<{ path: string; methods: string[]; extends: string }> = [];
 
         for (const dir of scanDirs) {
-          const absDir = resolveResPath(project_path, dir.startsWith("res://") ? dir : `res://${dir}`);
+          const absDir = resolveResPath(projectDir, dir.startsWith("res://") ? dir : `res://${dir}`);
           const files = await findGdFiles(absDir);
           for (const f of files) {
             const { methods, extends: ext } = await extractTestMethods(f);
             if (methods.length > 0) {
               testFiles.push({
-                path: resPathFromAbsolute(proj, f),
+                path: resPathFromAbsolute(projectDir, f),
                 methods,
                 extends: ext,
               });
@@ -383,7 +377,7 @@ export function registerTestTools(
     "godot_create_test",
     "Generate a GDScript test file skeleton for a given source script, following the project's test framework conventions",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       source_script: z
         .string()
         .describe('Source script to test, e.g. "res://src/player.gd"'),
@@ -398,10 +392,11 @@ export function registerTestTools(
     },
     async ({ project_path, source_script, test_path, framework }) => {
       try {
-        const detected = await detectFramework(project_path);
+        const projectDir = resolveProjectPath(project_path);
+        const detected = await detectFramework(projectDir);
         const fw: Framework = framework ?? detected.framework;
 
-        const sourceAbs = resolveResPath(project_path, source_script);
+        const sourceAbs = resolveResPath(projectDir, source_script);
         const sourceFile = path.basename(sourceAbs, ".gd");
 
         // Extract public methods from source (non-underscore, non-lifecycle)
@@ -419,10 +414,10 @@ export function registerTestTools(
         // Determine test file path
         let outPath: string;
         if (test_path) {
-          outPath = resolveResPath(project_path, test_path);
+          outPath = resolveResPath(projectDir, test_path);
         } else {
           const testDir = detected.test_directories[0] ?? "res://tests";
-          const testDirAbs = resolveResPath(project_path, testDir);
+          const testDirAbs = resolveResPath(projectDir, testDir);
           const prefix = fw === "gdunit4" ? "" : "test_";
           const suffix = fw === "gdunit4" ? "_test" : "";
           outPath = path.join(testDirAbs, `${prefix}${sourceFile}${suffix}.gd`);
@@ -433,7 +428,7 @@ export function registerTestTools(
         await mkdir(path.dirname(outPath), { recursive: true });
         await writeFile(outPath, content, "utf-8");
 
-        const resOut = resPathFromAbsolute(expandPath(project_path), outPath);
+        const resOut = resPathFromAbsolute(projectDir, outPath);
         return {
           content: [
             {
@@ -455,7 +450,7 @@ export function registerTestTools(
     "godot_run_tests",
     "Run GDScript tests headlessly and return results. Auto-detects GUT or GdUnit4, or uses the built-in runner.",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       path_filter: z
         .string()
         .optional()
@@ -479,11 +474,12 @@ export function registerTestTools(
     },
     async ({ project_path, path_filter, test_filter, test_method, framework, timeout }) => {
       try {
+        const projectDir = resolveProjectPath(project_path);
         const gp = await godotPath();
-        const proj = expandPath(project_path);
+        const proj = projectDir;
         const timeoutMs = (timeout ?? 60) * 1000;
 
-        const detected = await detectFramework(project_path);
+        const detected = await detectFramework(projectDir);
         const fw: Framework = framework ?? detected.framework;
 
         let args: string[];

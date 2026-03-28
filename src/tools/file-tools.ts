@@ -4,20 +4,13 @@ import { readFile, writeFile, mkdir, readdir, stat, unlink, rename } from "node:
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
-import os from "node:os";
 import { TscnParser, type TscnScene } from "../parsers/tscn-parser.js";
 import type { BridgeConnection } from "../connection.js";
 import type { ImportAssetResponse, ReadResourceResponse, WriteResourceResponse } from "../types/bridge-responses.js";
+import { expandPath, resolveProjectPath } from "../project-utils.js";
 
 const execFileAsync = promisify(execFile);
 const parser = new TscnParser();
-
-function expandPath(p: string): string {
-  if (p.startsWith("~")) {
-    return path.join(os.homedir(), p.slice(1));
-  }
-  return p;
-}
 
 function resolveResPath(projectPath: string, resPath: string): string {
   const project = expandPath(projectPath);
@@ -50,14 +43,15 @@ export function registerFileTools(
     "godot_parse_scene",
     "Parse a .tscn file and return its structure as JSON",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       scene_path: z
         .string()
         .describe('Scene file path (e.g. "res://scenes/player.tscn")'),
     },
     async ({ project_path, scene_path }) => {
       try {
-        const { scene } = await readScene(project_path, scene_path);
+        const projectDir = resolveProjectPath(project_path);
+        const { scene } = await readScene(projectDir, scene_path);
         return {
           content: [
             { type: "text", text: JSON.stringify(scene, null, 2) },
@@ -78,7 +72,7 @@ export function registerFileTools(
     "godot_create_scene",
     "Create a new .tscn file with a root node",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       scene_path: z
         .string()
         .describe('Scene path (e.g. "res://scenes/player.tscn")'),
@@ -92,7 +86,8 @@ export function registerFileTools(
     },
     async ({ project_path, scene_path, root_node_type, root_node_name }) => {
       try {
-        const filePath = resolveResPath(project_path, scene_path);
+        const projectDir = resolveProjectPath(project_path);
+        const filePath = resolveResPath(projectDir, scene_path);
         const dirPath = path.dirname(filePath);
         await mkdir(dirPath, { recursive: true });
 
@@ -126,7 +121,7 @@ export function registerFileTools(
     "godot_add_node_to_file",
     "Add a node to a .tscn file (no editor required)",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       scene_path: z.string().describe("Scene file path"),
       node_type: z.string().describe('Node type (e.g. "Sprite2D")'),
       node_name: z.string().describe("Node name"),
@@ -147,7 +142,8 @@ export function registerFileTools(
       properties,
     }) => {
       try {
-        const { scene, filePath } = await readScene(project_path, scene_path);
+        const projectDir = resolveProjectPath(project_path);
+        const { scene, filePath } = await readScene(projectDir, scene_path);
 
         const updated = parser.addNode(scene, {
           name: node_name,
@@ -181,7 +177,7 @@ export function registerFileTools(
     "godot_set_property_in_file",
     "Set a property on a node in a .tscn file",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       scene_path: z.string().describe("Scene file path"),
       node_path: z
         .string()
@@ -193,7 +189,8 @@ export function registerFileTools(
     },
     async ({ project_path, scene_path, node_path, property, value }) => {
       try {
-        const { scene, filePath } = await readScene(project_path, scene_path);
+        const projectDir = resolveProjectPath(project_path);
+        const { scene, filePath } = await readScene(projectDir, scene_path);
         const updated = parser.setProperty(scene, node_path, property, value);
         await writeScene(filePath, updated);
 
@@ -220,7 +217,7 @@ export function registerFileTools(
     "godot_load_sprite_in_file",
     "Set a Sprite2D texture by adding an ext_resource and setting the texture property",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       scene_path: z.string().describe("Scene file path"),
       node_path: z.string().describe("Path to the Sprite2D node"),
       texture_path: z
@@ -229,7 +226,8 @@ export function registerFileTools(
     },
     async ({ project_path, scene_path, node_path, texture_path }) => {
       try {
-        const { scene, filePath } = await readScene(project_path, scene_path);
+        const projectDir = resolveProjectPath(project_path);
+        const { scene, filePath } = await readScene(projectDir, scene_path);
 
         const { scene: withRes, id: resId } = parser.addExtResource(
           scene,
@@ -269,7 +267,7 @@ export function registerFileTools(
     "godot_validate_script",
     "Validate a GDScript file using Godot's --check-only flag",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       script_path: z
         .string()
         .describe('Script path (e.g. "res://src/player.gd")'),
@@ -280,12 +278,13 @@ export function registerFileTools(
     },
     async ({ project_path, script_path, include_warnings }) => {
       try {
+        const projectDir = resolveProjectPath(project_path);
         const gp = await godotPath();
 
         const args = [
           "--headless",
           "--path",
-          expandPath(project_path),
+          projectDir,
           "--check-only",
         ];
         if (include_warnings) {
@@ -333,13 +332,13 @@ export function registerFileTools(
     "godot_create_folder",
     "Create a new folder in the project",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       folder_path: z.string().describe("res:// path for the new folder (e.g. res://src/enemies)"),
     },
     async ({ project_path, folder_path }) => {
       try {
-        const dir = expandPath(project_path);
-        const absPath = resolveResPath(dir, folder_path);
+        const projectDir = resolveProjectPath(project_path);
+        const absPath = resolveResPath(projectDir, folder_path);
         await mkdir(absPath, { recursive: true });
         return { content: [{ type: "text", text: `Created folder: ${folder_path}` }] };
       } catch (e) {
@@ -352,13 +351,13 @@ export function registerFileTools(
     "godot_list_directory",
     "List files and folders in a project directory",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       directory: z.string().optional().describe("res:// directory path (default: res://)"),
     },
     async ({ project_path, directory }) => {
       try {
-        const dir = expandPath(project_path);
-        const absDir = resolveResPath(dir, directory ?? "res://");
+        const projectDir = resolveProjectPath(project_path);
+        const absDir = resolveResPath(projectDir, directory ?? "res://");
         const entries = await readdir(absDir, { withFileTypes: true });
         const results = await Promise.all(
           entries
@@ -390,12 +389,12 @@ export function registerFileTools(
     "godot_delete_file",
     "Delete a file from the Godot project",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       path: z.string().describe("res:// path to the file to delete"),
     },
     async ({ project_path, path: resPath }) => {
       try {
-        const absPath = resolveResPath(expandPath(project_path), resPath);
+        const absPath = resolveResPath(resolveProjectPath(project_path), resPath);
         await unlink(absPath);
         return {
           content: [{ type: "text", text: JSON.stringify({ success: true, path: resPath }) }],
@@ -413,15 +412,15 @@ export function registerFileTools(
     "godot_rename_file",
     "Rename or move a file within the Godot project",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       path: z.string().describe("Current res:// path of the file"),
       new_path: z.string().describe("New res:// path for the file"),
     },
     async ({ project_path, path: resPath, new_path: newResPath }) => {
       try {
-        const project = expandPath(project_path);
-        const absFrom = resolveResPath(project, resPath);
-        const absTo = resolveResPath(project, newResPath);
+        const projectDir = resolveProjectPath(project_path);
+        const absFrom = resolveResPath(projectDir, resPath);
+        const absTo = resolveResPath(projectDir, newResPath);
         const toDir = path.dirname(absTo);
         await mkdir(toDir, { recursive: true });
         await rename(absFrom, absTo);
@@ -441,14 +440,14 @@ export function registerFileTools(
     "godot_list_resources",
     "List resource files in the Godot project, optionally filtered by extension",
     {
-      project_path: z.string().describe("Path to the Godot project directory"),
+      project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       path: z.string().optional().describe("res:// path to scan (default: res://)"),
       extensions: z.array(z.string()).optional().describe('Filter by extensions (e.g. [".tres", ".res", ".tscn"])'),
     },
     async ({ project_path, path: resPath, extensions }) => {
       try {
-        const project = expandPath(project_path);
-        const baseDir = resolveResPath(project, resPath ?? "res://");
+        const projectDir = resolveProjectPath(project_path);
+        const baseDir = resolveResPath(projectDir, resPath ?? "res://");
         const resources: Array<{ path: string; type: string; size: number; modified: string }> = [];
 
         async function scanDir(dir: string, resPrefix: string): Promise<void> {

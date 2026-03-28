@@ -92,7 +92,7 @@ describe("test-tools", () => {
         throw new Error("ENOENT");
       });
       vi.mocked(readFile).mockResolvedValue(
-        JSON.stringify({ dirs: ["res://tests", "res://unit"] }) as unknown as ArrayBuffer
+        JSON.stringify({ dirs: ["res://tests", "res://unit"] }) as unknown as Buffer
       );
       const result = await mockServer.callTool("godot_detect_test_framework", {
         project_path: "/proj",
@@ -114,7 +114,7 @@ describe("test-tools", () => {
         isFile: () => true,
       } as unknown as ReturnType<typeof stat> extends Promise<infer T> ? T : never);
       vi.mocked(readFile).mockResolvedValue(
-        `extends GutTest\nfunc test_moves():\n\tpass\nfunc test_jumps():\n\tpass\n` as unknown as ArrayBuffer
+        `extends GutTest\nfunc test_moves():\n\tpass\nfunc test_jumps():\n\tpass\n` as unknown as Buffer
       );
       const result = await mockServer.callTool("godot_list_tests", {
         project_path: "/proj",
@@ -147,7 +147,7 @@ describe("test-tools", () => {
       vi.mocked(readFile).mockImplementation(async (p: unknown) => {
         if (String(p).endsWith(".gutconfig.json"))
           throw new Error("ENOENT");
-        return `extends Node\nfunc move():\n\tpass\nfunc jump():\n\tpass\n` as unknown as ArrayBuffer;
+        return `extends Node\nfunc move():\n\tpass\nfunc jump():\n\tpass\n` as unknown as Buffer;
       });
       vi.mocked(mkdir).mockResolvedValue(undefined);
       vi.mocked(writeFile).mockResolvedValue(undefined);
@@ -166,7 +166,7 @@ describe("test-tools", () => {
     it("generates builtin test skeleton when no framework detected", async () => {
       vi.mocked(access).mockRejectedValue(new Error("ENOENT"));
       vi.mocked(readFile).mockResolvedValue(
-        `extends Node\nfunc heal():\n\tpass\n` as unknown as ArrayBuffer
+        `extends Node\nfunc heal():\n\tpass\n` as unknown as Buffer
       );
       vi.mocked(mkdir).mockResolvedValue(undefined);
       vi.mocked(writeFile).mockResolvedValue(undefined);

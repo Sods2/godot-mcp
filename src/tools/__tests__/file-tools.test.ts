@@ -41,7 +41,7 @@ describe("file-tools", () => {
 
   describe("godot_parse_scene", () => {
     it("reads tscn file and returns parsed JSON", async () => {
-      vi.mocked(readFile).mockResolvedValue(SIMPLE_TSCN as unknown as ArrayBuffer);
+      vi.mocked(readFile).mockResolvedValue(SIMPLE_TSCN as unknown as Buffer);
       const result = await mockServer.callTool("godot_parse_scene", {
         project_path: "/proj",
         scene_path: "res://main.tscn",
@@ -95,7 +95,7 @@ describe("file-tools", () => {
 
   describe("godot_add_node_to_file", () => {
     it("reads scene, adds node, and writes back", async () => {
-      vi.mocked(readFile).mockResolvedValue(SIMPLE_TSCN as unknown as ArrayBuffer);
+      vi.mocked(readFile).mockResolvedValue(SIMPLE_TSCN as unknown as Buffer);
       vi.mocked(writeFile).mockResolvedValue(undefined);
       const result = await mockServer.callTool("godot_add_node_to_file", {
         project_path: "/proj",
@@ -124,7 +124,7 @@ describe("file-tools", () => {
 
   describe("godot_set_property_in_file", () => {
     it("reads scene, sets property, and writes back", async () => {
-      vi.mocked(readFile).mockResolvedValue(SIMPLE_TSCN as unknown as ArrayBuffer);
+      vi.mocked(readFile).mockResolvedValue(SIMPLE_TSCN as unknown as Buffer);
       vi.mocked(writeFile).mockResolvedValue(undefined);
       const result = await mockServer.callTool("godot_set_property_in_file", {
         project_path: "/proj",
@@ -140,7 +140,7 @@ describe("file-tools", () => {
 
   describe("godot_load_sprite_in_file", () => {
     it("adds ext_resource and sets texture property", async () => {
-      vi.mocked(readFile).mockResolvedValue(SIMPLE_TSCN as unknown as ArrayBuffer);
+      vi.mocked(readFile).mockResolvedValue(SIMPLE_TSCN as unknown as Buffer);
       vi.mocked(writeFile).mockResolvedValue(undefined);
       const result = await mockServer.callTool("godot_load_sprite_in_file", {
         project_path: "/proj",
