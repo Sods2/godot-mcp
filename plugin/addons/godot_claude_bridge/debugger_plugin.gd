@@ -21,10 +21,11 @@ func _setup_session(session_id: int) -> void:
 	session.breaked.connect(_on_session_breaked)
 	session.continued.connect(_on_session_continued)
 
-func _has_capture(capture: String) -> bool:
-	match capture:
-		"output", "stack_dump", "stack_frame_vars", "debug", "claude_bridge", "servers":
-			return true
+func _has_capture(capture: StringName) -> bool:
+	var c := String(capture)
+	if c == "output" or c == "stack_dump" or c == "stack_frame_vars" \
+		or c == "debug" or c == "claude_bridge" or c == "servers":
+		return true
 	return false
 
 func _on_session_started(session_id: int) -> void:
