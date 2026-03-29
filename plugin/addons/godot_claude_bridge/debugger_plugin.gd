@@ -342,6 +342,21 @@ func _get_output_panel_text() -> String:
 		return best_rtl.get_parsed_text()
 	return ""
 
+func _get_script_editor_line() -> int:
+	# When paused at a breakpoint, the script editor cursor is at the exact line
+	var script_editor = _editor_interface.get_script_editor() if _editor_interface != null else null
+	if script_editor == null:
+		script_editor = EditorInterface.get_script_editor()
+	if script_editor == null:
+		return 0
+	var editor = script_editor.get_current_editor()
+	if editor == null:
+		return 0
+	var base = editor.get_base_editor()
+	if base is CodeEdit:
+		return (base as CodeEdit).get_caret_line() + 1  # CodeEdit is 0-indexed
+	return 0
+
 func _read_stack_from_editor_ui() -> Array:
 	var base := _get_editor_base()
 	if base == null:
@@ -349,11 +364,16 @@ func _read_stack_from_editor_ui() -> Array:
 	var debugger := _find_node_of_class(base, "ScriptEditorDebugger")
 	if debugger == null:
 		return []
+	# Get current editor line — valid when paused at a breakpoint
+	var editor_line := _get_script_editor_line()
 	# Strategy 1: find first Tree in the "Stack Trace" tab (Godot 4.5+, 1-column format)
 	var stack_tree := _find_stack_trace_tree(debugger)
 	if stack_tree != null:
 		var frames := _extract_stack_frames(stack_tree)
 		if not frames.is_empty():
+			# Patch any frame with line=0 using the script editor position (top frame)
+			if editor_line > 0 and frames[0].get("line", 0) == 0:
+				frames[0]["line"] = editor_line
 			return frames
 	# Strategy 2 (fallback): scan all Trees, check any column for a file path
 	var frames := []
@@ -393,6 +413,9 @@ func _read_stack_from_editor_ui() -> Array:
 			frame["id"] = frames.size()
 			frames.append(frame)
 			item = item.get_next()
+		# Patch line=0 on top frame using script editor position
+		if not frames.is_empty() and editor_line > 0 and frames[0].get("line", 0) == 0:
+			frames[0]["line"] = editor_line
 		if not frames.is_empty():
 			return frames
 	return frames
@@ -577,4 +600,3 @@ func _extract_single_column_frame(item: TreeItem) -> Dictionary:
 			return parsed
 	# Strategy C: fall back to parsing get_text(0)
 	return _parse_single_column_stack_entry(item.get_text(0))
-
