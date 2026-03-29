@@ -389,7 +389,7 @@ func _read_stack_from_editor_ui() -> Array:
 					frame["file"] = item.get_text(0)
 					frame["function"] = item.get_text(1)
 			else:
-				frame = _parse_single_column_stack_entry(item.get_text(0))
+				frame = _extract_single_column_frame(item)
 			frame["id"] = frames.size()
 			frames.append(frame)
 			item = item.get_next()
@@ -424,9 +424,12 @@ func _read_locals_from_editor_ui() -> Array:
 				break
 		if is_stack:
 			continue
-		# Skip trees where the first item has no name (profiler, monitors, etc.)
+		# Skip trees with only one column (locals need name + value)
+		if cols < 2:
+			continue
+		# Skip trees where the first item has no name, is a profiler header, or is a timestamp (Errors panel)
 		var first_text: String = first.get_text(0).strip_edges()
-		if first_text.is_empty() or first_text == "Time":
+		if first_text.is_empty() or first_text == "Time" or _looks_like_timestamp(first_text):
 			continue
 		var item := first
 		while item != null:
@@ -477,6 +480,17 @@ func _looks_like_stack_entry(text: String) -> bool:
 	# Covers "res://file.gd", "0 - res://file.gd:8 - at function: _ready", etc.
 	return t.find("res://") != -1
 
+# Returns true if text looks like a timestamp (e.g. "0:00:00:221" from the Errors panel)
+func _looks_like_timestamp(text: String) -> bool:
+	var t := text.strip_edges()
+	var parts := t.split(":")
+	if parts.size() < 3:
+		return false
+	for part in parts:
+		if not part.is_valid_int():
+			return false
+	return true
+
 # Find the first Tree node inside the "Stack Trace" tab of the debugger (the stack tree)
 func _find_stack_trace_tree(debugger: Node) -> Tree:
 	for child in _get_all_children(debugger):
@@ -513,7 +527,7 @@ func _extract_stack_frames(tree: Tree) -> Array:
 				frame["file"] = item.get_text(0)
 				frame["function"] = item.get_text(1)
 		else:
-			frame = _parse_single_column_stack_entry(item.get_text(0))
+			frame = _extract_single_column_frame(item)
 		frame["id"] = frames.size()
 		frames.append(frame)
 		item = item.get_next()
@@ -542,4 +556,25 @@ func _parse_single_column_stack_entry(text: String) -> Dictionary:
 			frame["file"] = t.substr(0, colon_idx)
 			frame["line"] = after_colon.to_int()
 	return frame
+
+# Extract a stack frame from a single-column TreeItem.
+# Tries metadata, then tooltip, then get_text() parsing — in that order.
+func _extract_single_column_frame(item: TreeItem) -> Dictionary:
+	# Strategy A: metadata — Godot's ScriptEditorDebugger stores frame info as a Dictionary
+	var meta = item.get_metadata(0)
+	if meta is Dictionary:
+		if meta.has("file") and meta.has("line"):
+			return {
+				"file": str(meta["file"]),
+				"line": int(meta["line"]),
+				"function": str(meta.get("function", meta.get("func", "")))
+			}
+	# Strategy B: tooltip may contain the full formatted string
+	var tooltip: String = item.get_tooltip_text(0)
+	if tooltip != "" and tooltip.find("res://") != -1:
+		var parsed := _parse_single_column_stack_entry(tooltip)
+		if parsed.get("line", 0) != 0:
+			return parsed
+	# Strategy C: fall back to parsing get_text(0)
+	return _parse_single_column_stack_entry(item.get_text(0))
 
