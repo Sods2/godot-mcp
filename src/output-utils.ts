@@ -4,7 +4,10 @@
  */
 export function stripBBCode(text: string): string {
   return text
-    .replace(/\[\/?\w+(?:=[^\]]*)?]/g, "")  // Remove all [tag] and [/tag] and [tag=val]
+    // Only strip tags whose name contains at least one lowercase letter (real BBCode formatting
+    // like [color=green], [b], [/b], [right]). This preserves uppercase status markers like
+    // [PASSED], [FAILED], [ERROR], [PASS], [FAIL] used by GdUnit4 and some GUT variants.
+    .replace(/\[\/?\w*[a-z]\w*(?:=[^\]]*)?]/g, "")
     .replace(/^\[gd\]\s*/gm, "");            // Remove leading [gd] prefix GUT adds per-line
 }
 

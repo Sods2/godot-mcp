@@ -189,6 +189,36 @@ describe("file-tools", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("parse error at line 5");
     });
+
+    it("detects SCRIPT ERROR in output even when exit code is 0", async () => {
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
+          (cb as Function)(null, { stdout: "SCRIPT ERROR: 'bad_var' is not declared in the current scope.\n   at: res://bad.gd:10", stderr: "" });
+          return {} as ReturnType<typeof execFile>;
+        }
+      );
+      const result = await mockServer.callTool("godot_validate_script", {
+        project_path: "/proj",
+        script_path: "res://bad.gd",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("SCRIPT ERROR");
+    });
+
+    it("detects project-level load error even when exit code is 0", async () => {
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
+          (cb as Function)(null, { stdout: "", stderr: "ERROR: Failed to load resource: res://scenes/main.tscn" });
+          return {} as ReturnType<typeof execFile>;
+        }
+      );
+      const result = await mockServer.callTool("godot_validate_script", {
+        project_path: "/proj",
+        script_path: "res://player.gd",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("project-level errors");
+    });
   });
 
   describe("godot_create_folder", () => {

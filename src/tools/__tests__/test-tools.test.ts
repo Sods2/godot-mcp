@@ -29,6 +29,18 @@ Passed:  2  Failed:  1  Errors:  0  Warnings:  0  Skipped:  0
 Total time: 0.42s
 `;
 
+const GUT_BBCODE_OUTPUT = `
+[color=cyan]GUT v9.3.0[/color]
+
+[color=green]Running: res://tests/test_player.gd[/color]
+[color=green]- test_player_moves: PASSED[/color]
+[color=green]- test_player_jumps: PASSED[/color]
+[color=red]- test_collision: FAILED[/color]
+
+[color=yellow]Passed[/color]:  2  [color=yellow]Failed[/color]:  1  [color=yellow]Errors[/color]:  0  [color=yellow]Warnings[/color]:  0  [color=yellow]Skipped[/color]:  0
+Total time: 0.42s
+`;
+
 const GDUNIT4_OUTPUT = `
 [PASSED] TestPlayer.test_initial_position
 [PASSED] TestPlayer.test_movement
@@ -202,6 +214,28 @@ describe("test-tools", () => {
         expect(data.framework).toBe("gut");
         expect(data.passed).toBe(2);
         expect(data.failed).toBe(1);
+      });
+
+      it("parses GUT 9.x BBCode-wrapped output and returns structured results", async () => {
+        vi.mocked(access).mockImplementation(async (p: unknown) => {
+          if (String(p).endsWith("gut")) return undefined;
+          throw new Error("ENOENT");
+        });
+        vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
+        vi.mocked(execFile).mockImplementation(
+          (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
+            (cb as Function)(null, { stdout: GUT_BBCODE_OUTPUT, stderr: "" });
+            return {} as ReturnType<typeof execFile>;
+          }
+        );
+        const result = await mockServer.callTool("godot_run_tests", {
+          project_path: "/proj",
+        });
+        const data = JSON.parse(result.content[0].text!);
+        expect(data.framework).toBe("gut");
+        expect(data.passed).toBe(2);
+        expect(data.failed).toBe(1);
+        expect(data.tests).toHaveLength(3);
       });
     });
 

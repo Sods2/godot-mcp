@@ -301,6 +301,21 @@ export function registerFileTools(
 
         const output = cleanOutput((stdout + "\n" + stderr).trim());
 
+        // Even on exit code 0, Godot may have printed error indicators (e.g. corrupt
+        // project scene causes a crash before script parsing actually ran).
+        if (/SCRIPT ERROR/i.test(output) || /Parse Error/i.test(output)) {
+          return {
+            content: [{ type: "text", text: output }],
+            isError: true,
+          };
+        }
+        if (/FATAL:/i.test(output) || /ERROR:.*\.gd/i.test(output) || /ERROR:.*Failed to load/i.test(output)) {
+          return {
+            content: [{ type: "text", text: `Warning: Godot reported project-level errors; script validation may not have completed.\n${output}`.trim() }],
+            isError: true,
+          };
+        }
+
         return {
           content: [
             {
