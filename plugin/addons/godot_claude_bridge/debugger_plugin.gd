@@ -25,8 +25,8 @@ func _setup_session(session_id: int) -> void:
 	session.breaked.connect(_on_session_breaked)
 	session.continued.connect(_on_session_continued)
 
-func _has_capture(capture: StringName) -> bool:
-	var c := String(capture)
+func _has_capture(capture: String) -> bool:
+	var c := capture
 	if c == "output" or c == "stack_dump" or c == "stack_frame_vars" \
 		or c == "debug" or c == "claude_bridge" or c == "servers" or c == "scripts":
 		return true
@@ -55,8 +55,8 @@ func _on_session_continued() -> void:
 	_stack_frames = []
 	_locals = []
 
-func _capture(message: StringName, data: Array, session_id: int) -> bool:
-	var msg := String(message)
+func _capture(message: String, data: Array, session_id: int) -> bool:
+	var msg := message
 	if not _capture_logged:
 		_capture_logged = true
 		print("[Claude Bridge] Capture active (first message: %s)" % msg)
