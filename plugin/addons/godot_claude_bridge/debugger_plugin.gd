@@ -11,6 +11,7 @@ var _profiler_active: bool = false
 var _output_lines: Array[String] = []  # Game print() output
 var _editor_interface: EditorInterface = null
 var _capture_logged: bool = false
+var _output_panel_start: int = 0  # Text length at session start
 
 func set_editor_interface(ei: EditorInterface) -> void:
 	_editor_interface = ei
@@ -33,13 +34,20 @@ func _has_capture(capture: String) -> bool:
 	return false
 
 func _on_session_started(session_id: int) -> void:
+	var session := get_session(session_id)
+	if session == null:
+		return
+	_active_session = session
 	_is_paused = false
 	_stack_frames = []
 	_locals = []
 	_output_lines.clear()
+	_capture_logged = false
+	# Record current output panel length so we only return new output
+	_output_panel_start = _get_output_panel_text().length()
 	# Apply any pre-set breakpoints to the new session
 	for bp in _breakpoints:
-		_active_session.set_breakpoint(bp.file, bp.line, true)
+		session.set_breakpoint(bp.file, bp.line, true)
 
 func _on_session_stopped(session_id: int) -> void:
 	_is_paused = false
@@ -51,8 +59,6 @@ func _on_session_breaked(can_debug: bool) -> void:
 	_is_paused = true
 	_stack_frames = []
 	_locals = []
-	if _active_session != null and can_debug:
-		_active_session.send_message("get_stack_dump", [])
 
 func _on_session_continued() -> void:
 	_is_paused = false
@@ -173,16 +179,35 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 	return false
 
 func get_stack_frames() -> Array:
-	return _stack_frames
+	if not _stack_frames.is_empty():
+		return _stack_frames
+	# Fallback: read from the editor's debugger UI
+	return _read_stack_from_editor_ui()
 
 func get_locals() -> Array:
-	return _locals
+	if not _locals.is_empty():
+		return _locals
+	# Fallback: read from the editor's debugger UI
+	return _read_locals_from_editor_ui()
 
 func is_paused() -> bool:
 	return _is_paused
 
 func get_output_lines() -> Array:
-	return _output_lines.duplicate()
+	# If _capture received output lines, use those
+	if not _output_lines.is_empty():
+		return _output_lines.duplicate()
+	# Fallback: read from the editor's Output panel (EditorLog)
+	var full_text := _get_output_panel_text()
+	if full_text.length() > _output_panel_start:
+		var new_text := full_text.substr(_output_panel_start)
+		var lines: Array = []
+		for line in new_text.split("\n"):
+			var trimmed := line.strip_edges()
+			if trimmed != "":
+				lines.append(trimmed)
+		return lines
+	return []
 
 func set_breakpoint_in_session(file: String, line: int, enabled: bool) -> void:
 	# Track breakpoints locally
@@ -267,3 +292,105 @@ func _get_performance_snapshot() -> Dictionary:
 			{"name": "render_draw_calls", "value": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)},
 		]
 	}
+
+# --- Editor UI reading (fallback for built-in messages that bypass _capture) ---
+
+func _get_editor_base() -> Control:
+	if _editor_interface != null:
+		return _editor_interface.get_base_control()
+	return EditorInterface.get_base_control()
+
+func _get_output_panel_text() -> String:
+	var base := _get_editor_base()
+	if base == null:
+		return ""
+	var rtl := _find_node_of_class(base, "RichTextLabel", "EditorLog")
+	if rtl != null:
+		return rtl.get_parsed_text()
+	return ""
+
+func _read_stack_from_editor_ui() -> Array:
+	var base := _get_editor_base()
+	if base == null:
+		return []
+	# Find the ScriptEditorDebugger node
+	var debugger := _find_node_of_class(base, "ScriptEditorDebugger")
+	if debugger == null:
+		return []
+	# The stack Tree is inside the debugger with columns for function/file/line
+	var frames := []
+	for child in _get_all_children(debugger):
+		if child is Tree and child.get_columns() >= 2:
+			var root: TreeItem = child.get_root()
+			if root == null:
+				continue
+			var item := root.get_first_child()
+			while item != null:
+				var frame := {}
+				var cols: int = child.get_columns()
+				if cols >= 3:
+					frame["function"] = item.get_text(0)
+					frame["file"] = item.get_text(1)
+					frame["line"] = item.get_text(2).to_int()
+				elif cols >= 2:
+					frame["function"] = item.get_text(0)
+					frame["file"] = item.get_text(1)
+				frame["id"] = frames.size()
+				frames.append(frame)
+				item = item.get_next()
+			if not frames.is_empty():
+				return frames
+	return frames
+
+func _read_locals_from_editor_ui() -> Array:
+	var base := _get_editor_base()
+	if base == null:
+		return []
+	var debugger := _find_node_of_class(base, "ScriptEditorDebugger")
+	if debugger == null:
+		return []
+	# The locals inspector uses a Tree with property name/value columns
+	var locals := []
+	for child in _get_all_children(debugger):
+		if child is Tree and child.get_columns() >= 2:
+			var root: TreeItem = child.get_root()
+			if root == null:
+				continue
+			# Skip the stack tree (identified by having stack-like data)
+			var first := root.get_first_child()
+			if first == null:
+				continue
+			# Locals tree items have name in col 0 and value in col 1
+			# Distinguish from stack tree: stack has file paths in col 1
+			var col1_text: String = first.get_text(1)
+			if col1_text.begins_with("res://") or col1_text.ends_with(".gd"):
+				continue  # This is the stack tree, skip
+			var item := first
+			while item != null:
+				var name_text: String = item.get_text(0).strip_edges()
+				var val_text: String = item.get_text(1).strip_edges()
+				if name_text != "":
+					locals.append({"name": name_text, "value": val_text})
+				item = item.get_next()
+			if not locals.is_empty():
+				return locals
+	return locals
+
+func _find_node_of_class(root: Node, class_name_str: String, parent_class: String = "") -> Node:
+	for child in _get_all_children(root):
+		if child.get_class() == class_name_str or child.is_class(class_name_str):
+			if parent_class == "":
+				return child
+			if child.get_parent() != null and (child.get_parent().get_class() == parent_class or child.get_parent().is_class(parent_class)):
+				return child
+	return null
+
+func _get_all_children(node: Node) -> Array:
+	var result: Array = []
+	var stack: Array = [node]
+	while not stack.is_empty():
+		var current: Node = stack.pop_back()
+		for child in current.get_children():
+			result.append(child)
+			stack.append(child)
+	return result
