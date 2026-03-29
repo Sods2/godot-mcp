@@ -304,42 +304,89 @@ func _get_output_panel_text() -> String:
 	var base := _get_editor_base()
 	if base == null:
 		return ""
+	# Strategy 1: parent class is "EditorLog" (Godot 4.x prior to 4.5)
 	var rtl := _find_node_of_class(base, "RichTextLabel", "EditorLog")
 	if rtl != null:
 		return rtl.get_parsed_text()
+	# Strategies 2-4: traverse once and try progressively broader matches
+	var all_children := _get_all_children(base)
+	# Strategy 2: parent node NAME contains "log" or "output" (case-insensitive)
+	for child in all_children:
+		if child is RichTextLabel and child.get_parent() != null:
+			var parent_name: String = child.get_parent().name
+			if parent_name.containsn("log") or parent_name.containsn("output"):
+				return child.get_parsed_text()
+	# Strategy 3: find the tab labelled "Output" in any TabContainer
+	for child in all_children:
+		if child is TabContainer:
+			for tab_idx in range(child.get_tab_count()):
+				if child.get_tab_title(tab_idx).containsn("output"):
+					var tab_control: Control = child.get_tab_control(tab_idx)
+					if tab_control != null:
+						for sub in _get_all_children(tab_control):
+							if sub is RichTextLabel:
+								return sub.get_parsed_text()
+	# Strategy 4: largest RichTextLabel with any content (last resort)
+	var best_rtl: RichTextLabel = null
+	var best_len: int = 0
+	for child in all_children:
+		if child is RichTextLabel:
+			var text: String = child.get_parsed_text()
+			if text.length() > best_len:
+				best_rtl = child
+				best_len = text.length()
+	if best_rtl != null:
+		return best_rtl.get_parsed_text()
 	return ""
 
 func _read_stack_from_editor_ui() -> Array:
 	var base := _get_editor_base()
 	if base == null:
 		return []
-	# Find the ScriptEditorDebugger node
 	var debugger := _find_node_of_class(base, "ScriptEditorDebugger")
 	if debugger == null:
 		return []
-	# The stack Tree is inside the debugger with columns for function/file/line
 	var frames := []
 	for child in _get_all_children(debugger):
-		if child is Tree and child.get_columns() >= 2:
-			var root: TreeItem = child.get_root()
-			if root == null:
-				continue
-			var item := root.get_first_child()
-			while item != null:
-				var frame := {}
-				var cols: int = child.get_columns()
-				if cols >= 3:
-					frame["function"] = item.get_text(0)
-					frame["file"] = item.get_text(1)
-					frame["line"] = item.get_text(2).to_int()
-				elif cols >= 2:
-					frame["function"] = item.get_text(0)
-					frame["file"] = item.get_text(1)
-				frame["id"] = frames.size()
-				frames.append(frame)
-				item = item.get_next()
-			if not frames.is_empty():
-				return frames
+		if not (child is Tree) or child.get_columns() < 2:
+			continue
+		var root: TreeItem = child.get_root()
+		if root == null:
+			continue
+		var first := root.get_first_child()
+		if first == null:
+			continue
+		# Validate: stack trees have a file path in col 1 (3-col) or col 0/1 (2-col)
+		var cols: int = child.get_columns()
+		var file_col: int = 1
+		var valid := false
+		if cols >= 3:
+			valid = _looks_like_file_path(first.get_text(1))
+		else:
+			valid = _looks_like_file_path(first.get_text(1))
+			if not valid and _looks_like_file_path(first.get_text(0)):
+				valid = true
+				file_col = 0
+		if not valid:
+			continue
+		var item := first
+		while item != null:
+			var frame := {}
+			if cols >= 3:
+				frame["function"] = item.get_text(0)
+				frame["file"] = item.get_text(1)
+				frame["line"] = item.get_text(2).to_int()
+			elif file_col == 1:
+				frame["function"] = item.get_text(0)
+				frame["file"] = item.get_text(1)
+			else:
+				frame["file"] = item.get_text(0)
+				frame["function"] = item.get_text(1)
+			frame["id"] = frames.size()
+			frames.append(frame)
+			item = item.get_next()
+		if not frames.is_empty():
+			return frames
 	return frames
 
 func _read_locals_from_editor_ui() -> Array:
@@ -349,31 +396,31 @@ func _read_locals_from_editor_ui() -> Array:
 	var debugger := _find_node_of_class(base, "ScriptEditorDebugger")
 	if debugger == null:
 		return []
-	# The locals inspector uses a Tree with property name/value columns
 	var locals := []
 	for child in _get_all_children(debugger):
-		if child is Tree and child.get_columns() >= 2:
-			var root: TreeItem = child.get_root()
-			if root == null:
-				continue
-			# Skip the stack tree (identified by having stack-like data)
-			var first := root.get_first_child()
-			if first == null:
-				continue
-			# Locals tree items have name in col 0 and value in col 1
-			# Distinguish from stack tree: stack has file paths in col 1
-			var col1_text: String = first.get_text(1)
-			if col1_text.begins_with("res://") or col1_text.ends_with(".gd"):
-				continue  # This is the stack tree, skip
-			var item := first
-			while item != null:
-				var name_text: String = item.get_text(0).strip_edges()
-				var val_text: String = item.get_text(1).strip_edges()
-				if name_text != "":
-					locals.append({"name": name_text, "value": val_text})
-				item = item.get_next()
-			if not locals.is_empty():
-				return locals
+		if not (child is Tree) or child.get_columns() < 2:
+			continue
+		var root: TreeItem = child.get_root()
+		if root == null:
+			continue
+		var first := root.get_first_child()
+		if first == null:
+			continue
+		# Skip the stack tree (file path in col 1)
+		if _looks_like_file_path(first.get_text(1)):
+			continue
+		# Skip trees where the first item has no name (profiler, etc.)
+		if first.get_text(0).strip_edges().is_empty():
+			continue
+		var item := first
+		while item != null:
+			var name_text: String = item.get_text(0).strip_edges()
+			var val_text: String = item.get_text(1).strip_edges()
+			if name_text != "":
+				locals.append({"name": name_text, "value": val_text})
+			item = item.get_next()
+		if not locals.is_empty():
+			return locals
 	return locals
 
 func _find_node_of_class(root: Node, class_name_str: String, parent_class: String = "") -> Node:
@@ -394,3 +441,7 @@ func _get_all_children(node: Node) -> Array:
 			result.append(child)
 			stack.append(child)
 	return result
+
+func _looks_like_file_path(text: String) -> bool:
+	var t := text.strip_edges()
+	return t.begins_with("res://") or t.ends_with(".gd") or t.ends_with(".cs") or t.ends_with(".tscn")
