@@ -350,7 +350,7 @@ func _read_stack_from_editor_ui() -> Array:
 	var stack_tree := _find_stack_trace_tree(debugger)
 	if stack_tree != null:
 		var frames := _extract_stack_frames(stack_tree)
-		if not frames.is_empty():
+		if not frames.is_empty() and frames[0].get("line", 0) != 0:
 			return frames
 	# Strategy 2 (fallback): scan all Trees, check any column for a file path
 	var frames := []
@@ -390,7 +390,7 @@ func _read_stack_from_editor_ui() -> Array:
 			frame["id"] = frames.size()
 			frames.append(frame)
 			item = item.get_next()
-		if not frames.is_empty():
+		if not frames.is_empty() and frames[0].get("line", 0) != 0:
 			return frames
 	return frames
 
@@ -473,15 +473,11 @@ func _looks_like_file_path(text: String) -> bool:
 	var t := text.strip_edges()
 	return t.begins_with("res://") or t.ends_with(".gd") or t.ends_with(".cs") or t.ends_with(".tscn")
 
-# Returns true if text looks like a single-column stack entry (Godot 4.5 format: "N - res://...")
+# Returns true if text looks like a stack entry (contains a res:// path in any format)
 func _looks_like_stack_entry(text: String) -> bool:
 	var t := text.strip_edges()
-	if _looks_like_file_path(t):
-		return true
-	# Match "N - res://..." pattern
-	var re := RegEx.new()
-	re.compile(r"^\d+\s*-\s*res://")
-	return re.search(t) != null
+	# Covers "res://file.gd", "0 - res://file.gd:8 - at function: _ready", etc.
+	return t.find("res://") != -1
 
 # Find the first Tree node inside the "Stack Trace" tab of the debugger (the stack tree)
 func _find_stack_trace_tree(debugger: Node) -> Tree:
