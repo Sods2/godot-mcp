@@ -49,6 +49,10 @@ func _on_session_stopped(session_id: int) -> void:
 
 func _on_session_breaked(can_debug: bool) -> void:
 	_is_paused = true
+	_stack_frames = []
+	_locals = []
+	if _active_session != null and can_debug:
+		_active_session.send_message("get_stack_dump", [])
 
 func _on_session_continued() -> void:
 	_is_paused = false
@@ -60,16 +64,33 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 	if not _capture_logged:
 		_capture_logged = true
 		print("[Claude Bridge] Capture active (first message: %s)" % msg)
-	# Log all capture messages for diagnostics (remove in production)
+	# Diagnostics: log relevant capture messages with data type info
 	if msg == "stack_dump" or msg == "stack_frame_vars" or msg == "output" \
 		or msg.begins_with("servers:") or msg.begins_with("scripts:"):
-		print("[Claude Bridge] _capture: msg=%s data_size=%d" % [msg, data.size()])
-	# Native debugger: stack dump sent automatically when breaking
+		var type_info := ""
+		for i in range(min(data.size(), 3)):
+			type_info += type_string(typeof(data[i])) + " "
+		print("[Claude Bridge] _capture: msg=%s data_size=%d types=[%s]" % [msg, data.size(), type_info.strip_edges()])
+
+	# Native debugger: stack dump sent automatically when breaking or in response to get_stack_dump
 	if msg == "stack_dump":
 		_stack_frames = []
-		for frame in data:
-			if frame is Dictionary:
-				_stack_frames.append(frame)
+		if data.size() > 0 and data[0] is Dictionary:
+			# Custom/legacy format: array of dicts
+			for frame in data:
+				if frame is Dictionary:
+					_stack_frames.append(frame)
+		else:
+			# Godot native flat format: [file, line, func, file, line, func, ...]
+			var i := 0
+			while i + 2 < data.size():
+				_stack_frames.append({
+					"file": str(data[i]),
+					"line": int(data[i + 1]),
+					"function": str(data[i + 2]),
+					"id": i / 3
+				})
+				i += 3
 		# Auto-request locals for the top frame
 		if _active_session != null and not _stack_frames.is_empty():
 			_active_session.send_message("get_stack_frame_vars", [0])
@@ -93,17 +114,24 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 		return false
 
 	# Game print() output
-	# data format varies by Godot version: [PackedStringArray, PackedInt32Array] or interleaved
+	# Godot 4 format: [PackedStringArray(messages), PackedInt32Array(types)]
 	if msg == "output":
-		if data.size() >= 1 and data[0] is Array:
-			for text in data[0]:
-				var line: String = str(text).strip_edges()
-				if line != "":
-					_output_lines.append(line)
-		else:
-			for item in data:
-				if item is String:
-					var line: String = item.strip_edges()
+		if data.size() >= 1:
+			var messages = data[0]
+			if messages is PackedStringArray:
+				for text in messages:
+					var line: String = str(text).strip_edges()
+					if line != "":
+						_output_lines.append(line)
+			elif messages is Array:
+				for text in messages:
+					var line: String = str(text).strip_edges()
+					if line != "":
+						_output_lines.append(line)
+			else:
+				# Unexpected format: stringify everything
+				for item in data:
+					var line: String = str(item).strip_edges()
 					if line != "":
 						_output_lines.append(line)
 		return false
@@ -121,12 +149,27 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 			if local is Dictionary:
 				_locals.append(local)
 		return true
-	if msg == "servers:profile_frame":
-		_profiler_data.append(data)
+
+	# Profiler frame data from built-in profilers (servers + scripts)
+	if msg == "servers:profile_frame" or msg == "scripts:profile_frame":
+		var frame_info := {}
+		frame_info["profiler"] = "servers" if msg.begins_with("servers:") else "scripts"
+		if data.size() >= 2:
+			var names = data[0]
+			var values = data[1]
+			var entries: Array = []
+			if names is PackedStringArray:
+				for j in range(names.size()):
+					entries.append({
+						"name": names[j],
+						"value": float(values[j]) if j < values.size() else 0.0
+					})
+			frame_info["entries"] = entries
+		else:
+			frame_info["raw_size"] = data.size()
+		_profiler_data.append(frame_info)
 		return true
-	if msg == "scripts:profile_frame":
-		_profiler_data.append(data)
-		return true
+
 	return false
 
 func get_stack_frames() -> Array:
@@ -206,4 +249,21 @@ func stop_profiler() -> Array:
 	return _profiler_data.duplicate()
 
 func get_profiler_data() -> Array:
-	return _profiler_data.duplicate()
+	if not _profiler_data.is_empty():
+		return _profiler_data.duplicate()
+	# Fallback: basic performance metrics available without game-side capture
+	return [_get_performance_snapshot()]
+
+func _get_performance_snapshot() -> Dictionary:
+	return {
+		"profiler": "performance",
+		"entries": [
+			{"name": "fps", "value": Performance.get_monitor(Performance.TIME_FPS)},
+			{"name": "process_time_ms", "value": Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0},
+			{"name": "physics_process_time_ms", "value": Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0},
+			{"name": "static_memory_mb", "value": Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0},
+			{"name": "object_count", "value": Performance.get_monitor(Performance.OBJECT_COUNT)},
+			{"name": "nodes_count", "value": Performance.get_monitor(Performance.OBJECT_NODE_COUNT)},
+			{"name": "render_draw_calls", "value": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)},
+		]
+	}

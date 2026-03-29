@@ -32,7 +32,7 @@ var _debugger_ref = null
 # Deferred responses: Array of {id, type, frames_waited, extra}
 # Used for data that arrives asynchronously from _capture() callbacks
 var _deferred_requests: Array = []
-const _DEFERRED_MAX_FRAMES: int = 30  # ~0.5s at 60fps before giving up
+const _DEFERRED_MAX_FRAMES: int = 60  # ~1s at 60fps before giving up (allows round-trip for get_stack_dump)
 
 func _ready() -> void:
 	_protocol = _ProtocolScript.new()
