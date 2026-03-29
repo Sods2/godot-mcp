@@ -12,7 +12,6 @@ var _output_lines: Array[String] = []  # Game print() output
 var _editor_interface: EditorInterface = null
 var _capture_logged: bool = false
 var _output_panel_start: int = 0  # Text length at session start
-var _hierarchy_dumped: bool = false  # One-shot diagnostic flag
 
 func set_editor_interface(ei: EditorInterface) -> void:
 	_editor_interface = ei
@@ -60,10 +59,6 @@ func _on_session_breaked(can_debug: bool) -> void:
 	_is_paused = true
 	_stack_frames = []
 	_locals = []
-	if not _hierarchy_dumped:
-		_hierarchy_dumped = true
-		# Deferred so the debugger UI has time to populate
-		call_deferred("_dump_editor_hierarchy")
 
 func _on_session_continued() -> void:
 	_is_paused = false
@@ -298,72 +293,6 @@ func _get_performance_snapshot() -> Dictionary:
 		]
 	}
 
-# --- Diagnostic: one-shot hierarchy dump to editor console ---
-
-func _dump_editor_hierarchy() -> void:
-	var base := _get_editor_base()
-	if base == null:
-		print("[DIAG] No editor base control found")
-		return
-
-	var all := _get_all_children(base)
-
-	# Part 1: All RichTextLabel nodes (for Bug 1 - output panel)
-	print("[DIAG] === RichTextLabel nodes in editor ===")
-	for child in all:
-		if child is RichTextLabel:
-			var path := _node_ancestor_chain(child, 4)
-			var text_len: int = child.get_parsed_text().length()
-			print("[DIAG] RTL: %s  text_len=%d" % [path, text_len])
-
-	# Part 2: Find ScriptEditorDebugger and dump its Tree nodes (for Bug 2)
-	print("[DIAG] === ScriptEditorDebugger search ===")
-	var debugger_count := 0
-	for child in all:
-		if child.get_class() == "ScriptEditorDebugger" or child.is_class("ScriptEditorDebugger"):
-			debugger_count += 1
-			print("[DIAG] Debugger #%d: %s" % [debugger_count, _node_ancestor_chain(child, 3)])
-			# Dump all Tree children of this debugger
-			for sub in _get_all_children(child):
-				if sub is Tree:
-					var cols: int = sub.get_columns()
-					var root: TreeItem = sub.get_root()
-					var item_count := 0
-					var sample := ""
-					if root != null:
-						var item := root.get_first_child()
-						while item != null:
-							item_count += 1
-							if item_count <= 2:
-								var texts := []
-								for c in range(cols):
-									texts.append(item.get_text(c))
-								sample += "  row%d: %s" % [item_count, str(texts)]
-							item = item.get_next()
-					print("[DIAG]   Tree: %s  cols=%d items=%d%s" % [
-						_node_ancestor_chain(sub, 5), cols, item_count, sample])
-	if debugger_count == 0:
-		print("[DIAG] No ScriptEditorDebugger found")
-
-	# Part 3: TabContainer tabs (for output panel tab search)
-	print("[DIAG] === TabContainers ===")
-	for child in all:
-		if child is TabContainer:
-			var tabs := []
-			for i in range(child.get_tab_count()):
-				tabs.append(child.get_tab_title(i))
-			print("[DIAG] TabContainer: %s  tabs=%s" % [_node_ancestor_chain(child, 3), str(tabs)])
-
-func _node_ancestor_chain(node: Node, depth: int) -> String:
-	var parts: Array[String] = []
-	var current: Node = node
-	for i in range(depth):
-		if current == null:
-			break
-		parts.push_front("%s(%s)" % [current.name, current.get_class()])
-		current = current.get_parent()
-	return " > ".join(parts)
-
 # --- Editor UI reading (fallback for built-in messages that bypass _capture) ---
 
 func _get_editor_base() -> Control:
@@ -490,10 +419,10 @@ func _read_locals_from_editor_ui() -> Array:
 		if first == null:
 			continue
 		var cols: int = child.get_columns()
-		# Skip stack trees (any column has a file path)
+		# Skip stack trees: any column has a file path, or first item matches single-col stack format
 		var is_stack := false
 		for c in range(cols):
-			if _looks_like_file_path(first.get_text(c)):
+			if _looks_like_stack_entry(first.get_text(c)):
 				is_stack = true
 				break
 		if is_stack:
@@ -543,6 +472,16 @@ func _get_all_children(node: Node) -> Array:
 func _looks_like_file_path(text: String) -> bool:
 	var t := text.strip_edges()
 	return t.begins_with("res://") or t.ends_with(".gd") or t.ends_with(".cs") or t.ends_with(".tscn")
+
+# Returns true if text looks like a single-column stack entry (Godot 4.5 format: "N - res://...")
+func _looks_like_stack_entry(text: String) -> bool:
+	var t := text.strip_edges()
+	if _looks_like_file_path(t):
+		return true
+	# Match "N - res://..." pattern
+	var re := RegEx.new()
+	re.compile(r"^\d+\s*-\s*res://")
+	return re.search(t) != null
 
 # Find the first Tree node inside the "Stack Trace" tab of the debugger (the stack tree)
 func _find_stack_trace_tree(debugger: Node) -> Tree:
@@ -603,10 +542,22 @@ func _extract_stack_frames(tree: Tree) -> Array:
 		item = item.get_next()
 	return frames
 
-# Parse a single-column stack entry in "file:line" or plain "file" format
+# Parse a single-column stack entry.
+# Handles Godot 4.5 format: "0 - res://node_2d.gd:8 - at function: _ready"
+# and fallback format: "res://file.gd:line"
 func _parse_single_column_stack_entry(text: String) -> Dictionary:
 	var t := text.strip_edges()
 	var frame := {"file": t, "function": "", "line": 0}
+	# Godot 4.5: "N - res://file.gd:line - at function: func_name"
+	var re := RegEx.new()
+	re.compile(r"^\d+\s*-\s*(res://[^:]+):(\d+)\s*-\s*at function:\s*(.+)$")
+	var m := re.search(t)
+	if m != null:
+		frame["file"] = m.get_string(1)
+		frame["line"] = m.get_string(2).to_int()
+		frame["function"] = m.get_string(3).strip_edges()
+		return frame
+	# Fallback: "res://file.gd:line"
 	var colon_idx := t.rfind(":")
 	if colon_idx > 0:
 		var after_colon := t.substr(colon_idx + 1)
