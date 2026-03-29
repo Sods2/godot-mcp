@@ -182,7 +182,10 @@ func get_stack_frames() -> Array:
 	if not _stack_frames.is_empty():
 		return _stack_frames
 	# Fallback: read from the editor's debugger UI
-	return _read_stack_from_editor_ui()
+	var frames = _read_stack_from_editor_ui()
+	if frames.is_empty() or frames[0].get("line", 0) == 0:
+		return []  # Not ready yet — let deferred polling retry
+	return frames
 
 func get_locals() -> Array:
 	if not _locals.is_empty():
@@ -350,7 +353,7 @@ func _read_stack_from_editor_ui() -> Array:
 	var stack_tree := _find_stack_trace_tree(debugger)
 	if stack_tree != null:
 		var frames := _extract_stack_frames(stack_tree)
-		if not frames.is_empty() and frames[0].get("line", 0) != 0:
+		if not frames.is_empty():
 			return frames
 	# Strategy 2 (fallback): scan all Trees, check any column for a file path
 	var frames := []
@@ -390,7 +393,7 @@ func _read_stack_from_editor_ui() -> Array:
 			frame["id"] = frames.size()
 			frames.append(frame)
 			item = item.get_next()
-		if not frames.is_empty() and frames[0].get("line", 0) != 0:
+		if not frames.is_empty():
 			return frames
 	return frames
 
@@ -401,13 +404,7 @@ func _read_locals_from_editor_ui() -> Array:
 	var debugger := _find_node_of_class(base, "ScriptEditorDebugger")
 	if debugger == null:
 		return []
-	# Strategy 1: find second Tree in the "Stack Trace" tab (Godot 4.5+, locals/inspector)
-	var locals_tree := _find_locals_tree(debugger)
-	if locals_tree != null:
-		var locals := _extract_locals_from_tree(locals_tree)
-		if not locals.is_empty():
-			return locals
-	# Strategy 2 (fallback): scan all Trees, skip stack trees and known non-locals trees
+	# Scan all Trees in the debugger, skip stack trees and known non-locals trees
 	var locals := []
 	for child in _get_all_children(debugger):
 		if not (child is Tree):
@@ -419,7 +416,7 @@ func _read_locals_from_editor_ui() -> Array:
 		if first == null:
 			continue
 		var cols: int = child.get_columns()
-		# Skip stack trees: any column has a file path, or first item matches single-col stack format
+		# Skip stack trees: any item text contains a res:// path
 		var is_stack := false
 		for c in range(cols):
 			if _looks_like_stack_entry(first.get_text(c)):
@@ -437,7 +434,8 @@ func _read_locals_from_editor_ui() -> Array:
 			var val_text: String = ""
 			if cols >= 2:
 				val_text = item.get_text(1).strip_edges()
-			if name_text != "":
+			# Skip any item that looks like a stack entry (safety net)
+			if name_text != "" and not _looks_like_stack_entry(name_text):
 				locals.append({"name": name_text, "value": val_text})
 			item = item.get_next()
 		if not locals.is_empty():
@@ -493,23 +491,6 @@ func _find_stack_trace_tree(debugger: Node) -> Tree:
 							return sub
 	return null
 
-# Find the second Tree node inside the "Stack Trace" tab of the debugger (the locals/inspector tree)
-func _find_locals_tree(debugger: Node) -> Tree:
-	for child in _get_all_children(debugger):
-		if child is TabContainer:
-			for tab_idx in range(child.get_tab_count()):
-				if child.get_tab_title(tab_idx).containsn("stack"):
-					var tab_control: Control = child.get_tab_control(tab_idx)
-					if tab_control == null:
-						continue
-					var tree_count := 0
-					for sub in _get_all_children(tab_control):
-						if sub is Tree:
-							tree_count += 1
-							if tree_count == 2:
-								return sub
-	return null
-
 # Extract stack frames from a Tree, handling 1-col, 2-col, and 3-col formats
 func _extract_stack_frames(tree: Tree) -> Array:
 	var frames := []
@@ -562,20 +543,3 @@ func _parse_single_column_stack_entry(text: String) -> Dictionary:
 			frame["line"] = after_colon.to_int()
 	return frame
 
-# Extract locals name/value pairs from a Tree, handling 1-col and 2-col formats
-func _extract_locals_from_tree(tree: Tree) -> Array:
-	var locals := []
-	var root: TreeItem = tree.get_root()
-	if root == null:
-		return locals
-	var cols: int = tree.get_columns()
-	var item := root.get_first_child()
-	while item != null:
-		var name_text: String = item.get_text(0).strip_edges()
-		var val_text: String = ""
-		if cols >= 2:
-			val_text = item.get_text(1).strip_edges()
-		if name_text != "":
-			locals.append({"name": name_text, "value": val_text})
-		item = item.get_next()
-	return locals
