@@ -12,9 +12,9 @@ func start_profiler(_ei: EditorInterface, _params: Dictionary) -> Dictionary:
 	return { "success": true }
 
 func stop_profiler(_ei: EditorInterface, _params: Dictionary) -> Dictionary:
-	var data := _debugger.stop_profiler()
+	var data: Array = _debugger.stop_profiler()
 	return { "success": true, "frames": data }
 
 func get_profiler_data(_ei: EditorInterface, _params: Dictionary) -> Dictionary:
-	var data := _debugger.get_profiler_data()
+	var data: Array = _debugger.get_profiler_data()
 	return { "frames": data }

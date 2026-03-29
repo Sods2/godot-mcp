@@ -1,39 +1,50 @@
 @tool
-class_name BridgeServer
 extends Node
+
+const _ProtocolScript = preload("res://addons/godot_claude_bridge/protocol.gd")
+const _SceneHandlerScript = preload("res://addons/godot_claude_bridge/handlers/scene_handler.gd")
+const _InspectorHandlerScript = preload("res://addons/godot_claude_bridge/handlers/inspector_handler.gd")
+const _ScriptHandlerScript = preload("res://addons/godot_claude_bridge/handlers/script_handler.gd")
+const _RunHandlerScript = preload("res://addons/godot_claude_bridge/handlers/run_handler.gd")
+const _ScreenshotHandlerScript = preload("res://addons/godot_claude_bridge/handlers/screenshot_handler.gd")
+const _SignalHandlerScript = preload("res://addons/godot_claude_bridge/handlers/signal_handler.gd")
+const _AnimationHandlerScript = preload("res://addons/godot_claude_bridge/handlers/animation_handler.gd")
+const _DebugHandlerScript = preload("res://addons/godot_claude_bridge/handlers/debug_handler.gd")
+const _ProfilerHandlerScript = preload("res://addons/godot_claude_bridge/handlers/profiler_handler.gd")
 
 var editor_interface: EditorInterface
 var _tcp_server: TCPServer
 var _client: StreamPeerTCP = null
-var _protocol: BridgeProtocol = BridgeProtocol.new()
+var _protocol = null
 
 # Handlers (populated in _ready)
-var _scene_handler: SceneHandler
-var _inspector_handler: InspectorHandler
-var _script_handler: ScriptHandler
-var _run_handler: RunHandler
-var _screenshot_handler: ScreenshotHandler
-var _signal_handler: SignalHandler
-var _animation_handler: AnimationHandler
-var _debug_handler: DebugHandler
-var _profiler_handler: ProfilerHandler
+var _scene_handler
+var _inspector_handler
+var _script_handler
+var _run_handler
+var _screenshot_handler
+var _signal_handler
+var _animation_handler
+var _debug_handler
+var _profiler_handler
 var _debugger_ref = null
 
 func _ready() -> void:
-	_scene_handler = SceneHandler.new()
-	_inspector_handler = InspectorHandler.new()
-	_script_handler = ScriptHandler.new()
-	_run_handler = RunHandler.new()
-	_screenshot_handler = ScreenshotHandler.new()
-	_signal_handler = SignalHandler.new()
-	_animation_handler = AnimationHandler.new()
+	_protocol = _ProtocolScript.new()
+	_scene_handler = _SceneHandlerScript.new()
+	_inspector_handler = _InspectorHandlerScript.new()
+	_script_handler = _ScriptHandlerScript.new()
+	_run_handler = _RunHandlerScript.new()
+	_screenshot_handler = _ScreenshotHandlerScript.new()
+	_signal_handler = _SignalHandlerScript.new()
+	_animation_handler = _AnimationHandlerScript.new()
 
-func set_debugger(debugger: ClaudeBridgeDebugger) -> void:
-	_debug_handler = DebugHandler.new(debugger)
+func set_debugger(debugger) -> void:
+	_debug_handler = _DebugHandlerScript.new(debugger)
 	_debugger_ref = debugger
 
-func set_profiler_handler(debugger: ClaudeBridgeDebugger) -> void:
-	_profiler_handler = ProfilerHandler.new(debugger)
+func set_profiler_handler(debugger) -> void:
+	_profiler_handler = _ProfilerHandlerScript.new(debugger)
 
 func start(port: int = 6008) -> void:
 	_tcp_server = TCPServer.new()
@@ -56,11 +67,14 @@ func _process(_delta: float) -> void:
 	# Accept new connection if no client
 	if _client == null and _tcp_server.is_connection_available():
 		_client = _tcp_server.take_connection()
-		_protocol = BridgeProtocol.new()  # Fresh parser for new connection
+		_protocol = _ProtocolScript.new()  # Fresh parser for new connection
 		print("[Claude Bridge] Client connected")
 
 	if _client == null:
 		return
+
+	# Poll to update connection status (required in Godot 4)
+	_client.poll()
 
 	# Check client still connected
 	if _client.get_status() != StreamPeerTCP.STATUS_CONNECTED:
@@ -73,7 +87,7 @@ func _process(_delta: float) -> void:
 	if available > 0:
 		var data := _client.get_data(available)
 		if data[0] == OK:
-			var messages := _protocol.feed(data[1])
+			var messages: Array = _protocol.feed(data[1])
 			for msg in messages:
 				_handle_message(msg)
 
@@ -123,8 +137,8 @@ func _handle_message(msg: Dictionary) -> void:
 		"run.get_output":
 			if _debugger_ref != null:
 				var since_line: int = params.get("since_line", 0)
-				var all_lines := _debugger_ref.get_output_lines()
-				var output := all_lines.slice(since_line) if since_line > 0 and since_line < all_lines.size() else all_lines
+				var all_lines: Array = _debugger_ref.get_output_lines()
+				var output: Array = all_lines.slice(since_line) if since_line > 0 and since_line < all_lines.size() else all_lines
 				result = {"output": output, "total_lines": all_lines.size()}
 			else:
 				result = _run_handler.get_output(params)
@@ -228,9 +242,9 @@ func _handle_message(msg: Dictionary) -> void:
 			error_msg = "Unknown method: " + method
 
 	if error_msg != "":
-		_send(_client, BridgeProtocol.encode_error(id, -32601, error_msg))
+		_send(_client, _protocol.encode_error(id, -32601, error_msg))
 	else:
-		_send(_client, BridgeProtocol.encode_response(id, result))
+		_send(_client, _protocol.encode_response(id, result))
 
 func _handle_editor_status() -> Dictionary:
 	var open_scenes: Array[String] = []

@@ -1,5 +1,4 @@
 @tool
-class_name ClaudeBridgeDebugger
 extends EditorDebuggerPlugin
 
 var _breakpoints: Array = []  # Array of {file, line}
@@ -21,10 +20,9 @@ func _setup_session(session_id: int) -> void:
 	session.breaked.connect(_on_session_breaked)
 	session.continued.connect(_on_session_continued)
 
-func _has_capture(capture: StringName) -> bool:
-	var c := String(capture)
-	if c == "output" or c == "stack_dump" or c == "stack_frame_vars" \
-		or c == "debug" or c == "claude_bridge" or c == "servers":
+func _has_capture(capture: String) -> bool:
+	if capture == "output" or capture == "stack_dump" or capture == "stack_frame_vars" \
+		or capture == "debug" or capture == "claude_bridge" or capture == "servers":
 		return true
 	return false
 
@@ -83,13 +81,13 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 	if message == "output":
 		if data.size() >= 1 and data[0] is Array:
 			for text in data[0]:
-				var line := str(text).strip_edges()
+				var line: String = str(text).strip_edges()
 				if line != "":
 					_output_lines.append(line)
 		else:
 			for item in data:
 				if item is String:
-					var line := item.strip_edges()
+					var line: String = item.strip_edges()
 					if line != "":
 						_output_lines.append(line)
 		return false

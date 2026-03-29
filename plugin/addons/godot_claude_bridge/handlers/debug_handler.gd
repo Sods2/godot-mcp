@@ -13,7 +13,7 @@ func set_breakpoint(_ei: EditorInterface, params: Dictionary) -> Dictionary:
 	if file.is_empty() or line <= 0:
 		return { "error": "file and line required" }
 	_debugger.set_breakpoint_in_session(file, line, true)
-	var has_session := _debugger.has_active_session()
+	var has_session: bool = _debugger.has_active_session()
 	var result := { "success": true, "file": file, "line": line, "applied": has_session }
 	if not has_session:
 		result["note"] = "Breakpoint stored; will apply when debug session starts (run the scene first)"
