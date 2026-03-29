@@ -41,11 +41,7 @@ func connect_signal(editor_interface: EditorInterface, params: Dictionary) -> Di
 	var callable = Callable(to_node, method_name)
 	if not to_node.has_method(method_name):
 		return {"error": "Target node has no method: " + method_name}
-	var undo_redo = editor_interface.get_editor_undo_redo()
-	undo_redo.create_action("Connect Signal")
-	undo_redo.add_do_method(from_node, "connect", signal_name, callable, flags)
-	undo_redo.add_undo_method(from_node, "disconnect", signal_name, callable)
-	undo_redo.commit_action()
+	from_node.connect(signal_name, callable, flags)
 	return {"success": true, "warning": "Runtime connection only — will not persist when the scene is saved/reloaded"}
 
 func disconnect_signal(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
@@ -63,11 +59,7 @@ func disconnect_signal(editor_interface: EditorInterface, params: Dictionary) ->
 	var callable = Callable(to_node, method_name)
 	if not from_node.is_connected(signal_name, callable):
 		return {"error": "Signal not connected"}
-	var undo_redo = editor_interface.get_editor_undo_redo()
-	undo_redo.create_action("Disconnect Signal")
-	undo_redo.add_do_method(from_node, "disconnect", signal_name, callable)
-	undo_redo.add_undo_method(from_node, "connect", signal_name, callable)
-	undo_redo.commit_action()
+	from_node.disconnect(signal_name, callable)
 	return {"success": true}
 
 func list_connections(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:

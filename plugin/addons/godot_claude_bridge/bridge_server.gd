@@ -29,6 +29,11 @@ var _debug_handler
 var _profiler_handler
 var _debugger_ref = null
 
+# Deferred responses: Array of {id, type, frames_waited, extra}
+# Used for data that arrives asynchronously from _capture() callbacks
+var _deferred_requests: Array = []
+const _DEFERRED_MAX_FRAMES: int = 30  # ~0.5s at 60fps before giving up
+
 func _ready() -> void:
 	_protocol = _ProtocolScript.new()
 	_scene_handler = _SceneHandlerScript.new()
@@ -60,9 +65,51 @@ func stop() -> void:
 		_tcp_server.stop()
 		_tcp_server = null
 
+func _process_deferred() -> void:
+	if _deferred_requests.is_empty() or _client == null:
+		return
+	var completed: Array = []
+	for i in range(_deferred_requests.size()):
+		var req: Dictionary = _deferred_requests[i]
+		req.frames_waited += 1
+		var result = _check_deferred(req)
+		if result != null:
+			_send(_client, _protocol.encode_response(req.id, result))
+			completed.append(i)
+	# Remove completed in reverse order to preserve indices
+	for i in range(completed.size() - 1, -1, -1):
+		_deferred_requests.remove_at(completed[i])
+
+func _check_deferred(req: Dictionary) -> Variant:
+	var t: String = req.type
+	var waited: int = req.frames_waited
+	if t == "stack_trace":
+		var frames: Array = _debugger_ref.get_stack_frames() if _debugger_ref != null else []
+		if not frames.is_empty() or waited >= _DEFERRED_MAX_FRAMES:
+			return {"frames": frames}
+	elif t == "locals":
+		var locals: Array = _debugger_ref.get_locals() if _debugger_ref != null else []
+		if not locals.is_empty() or waited >= _DEFERRED_MAX_FRAMES:
+			return {"locals": locals}
+	elif t == "output":
+		# Wait a minimum number of frames for output to accumulate, then return
+		if waited >= 5:
+			var since_line: int = req.get("since_line", 0)
+			var all_lines: Array = _debugger_ref.get_output_lines() if _debugger_ref != null else []
+			var output: Array = all_lines.slice(since_line) if since_line > 0 and since_line < all_lines.size() else all_lines
+			return {"output": output, "total_lines": all_lines.size()}
+	elif t == "profiler_data":
+		var data: Array = _debugger_ref.get_profiler_data() if _debugger_ref != null else []
+		if not data.is_empty() or waited >= _DEFERRED_MAX_FRAMES:
+			return {"frames": data}
+	return null
+
 func _process(_delta: float) -> void:
 	if _tcp_server == null:
 		return
+
+	# Process any deferred responses first
+	_process_deferred()
 
 	# Accept new connection if no client
 	if _client == null and _tcp_server.is_connection_available():
@@ -136,10 +183,8 @@ func _handle_message(msg: Dictionary) -> void:
 			result = _run_handler.is_running(editor_interface)
 		"run.get_output":
 			if _debugger_ref != null:
-				var since_line: int = params.get("since_line", 0)
-				var all_lines: Array = _debugger_ref.get_output_lines()
-				var output: Array = all_lines.slice(since_line) if since_line > 0 and since_line < all_lines.size() else all_lines
-				result = {"output": output, "total_lines": all_lines.size()}
+				_deferred_requests.append({"id": id, "type": "output", "frames_waited": 0, "since_line": params.get("since_line", 0)})
+				return  # Response will be sent by _process_deferred()
 			else:
 				result = _run_handler.get_output(params)
 		"screenshot.viewport":
@@ -195,12 +240,20 @@ func _handle_message(msg: Dictionary) -> void:
 				error_msg = "Debug handler not initialized"
 		"debug.get_stack_trace":
 			if _debug_handler != null:
-				result = _debug_handler.get_stack_trace(editor_interface, params)
+				if _debugger_ref != null and _debugger_ref.is_paused():
+					_deferred_requests.append({"id": id, "type": "stack_trace", "frames_waited": 0})
+					return  # Response will be sent by _process_deferred()
+				else:
+					result = _debug_handler.get_stack_trace(editor_interface, params)
 			else:
 				error_msg = "Debug handler not initialized"
 		"debug.get_locals":
 			if _debug_handler != null:
-				result = _debug_handler.get_locals(editor_interface, params)
+				if _debugger_ref != null and _debugger_ref.is_paused():
+					_deferred_requests.append({"id": id, "type": "locals", "frames_waited": 0})
+					return  # Response will be sent by _process_deferred()
+				else:
+					result = _debug_handler.get_locals(editor_interface, params)
 			else:
 				error_msg = "Debug handler not initialized"
 		"debug.step_over":
@@ -235,7 +288,11 @@ func _handle_message(msg: Dictionary) -> void:
 				error_msg = "Profiler handler not initialized"
 		"profiler.get_data":
 			if _profiler_handler != null:
-				result = _profiler_handler.get_profiler_data(editor_interface, params)
+				if _debugger_ref != null and _debugger_ref.is_profiler_active():
+					_deferred_requests.append({"id": id, "type": "profiler_data", "frames_waited": 0})
+					return  # Response will be sent by _process_deferred()
+				else:
+					result = _profiler_handler.get_profiler_data(editor_interface, params)
 			else:
 				error_msg = "Profiler handler not initialized"
 		_:

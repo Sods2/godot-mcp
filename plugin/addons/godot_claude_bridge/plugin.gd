@@ -13,6 +13,7 @@ func _enter_tree() -> void:
 		return
 
 	_debugger_plugin = _DebuggerScript.new()
+	_debugger_plugin.set_editor_interface(get_editor_interface())
 	add_debugger_plugin(_debugger_plugin)
 
 	_bridge_server = _BridgeServerScript.new()

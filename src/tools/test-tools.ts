@@ -167,22 +167,34 @@ function parseGutOutput(output: string): Omit<RunResults, "framework" | "raw_out
       continue;
     }
 
+    // Bare format: "PASSED  test_something" or "FAILED  test_something"
+    const bareResult = line.match(/^\s*(PASSED|FAILED|PENDING)\s+(test_\w+)/i);
+    if (bareResult) {
+      const s = bareResult[1].toUpperCase();
+      const status: TestResult["status"] = s === "PASSED" ? "passed" : s === "PENDING" ? "skipped" : "failed";
+      tests.push({ name: bareResult[2], suite: currentSuite, status });
+      continue;
+    }
+
+    // Strip residual non-printable chars before summary parsing (handles incomplete ANSI)
+    const cleanLine = line.replace(/[^\x20-\x7E]/g, "");
+
     // Inline summary: "Passed:  2  Failed:  1  Errors:  0  Warnings:  0  Skipped:  0"
-    if (/Passed:/i.test(line) && /Failed:/i.test(line)) {
-      const pm = line.match(/Passed:\s*(\d+)/i); if (pm) passed = parseInt(pm[1]);
-      const fm = line.match(/Failed:\s*(\d+)/i); if (fm) failed = parseInt(fm[1]);
-      const em = line.match(/Errors:\s*(\d+)/i); if (em) errors = parseInt(em[1]);
-      const sm = line.match(/(?:Skipped|Pending):\s*(\d+)/i); if (sm) skipped = parseInt(sm[1]);
+    if (/Passed:/i.test(cleanLine) && /Failed:/i.test(cleanLine)) {
+      const pm = cleanLine.match(/Passed:\s*(\d+)/i); if (pm) passed = parseInt(pm[1]);
+      const fm = cleanLine.match(/Failed:\s*(\d+)/i); if (fm) failed = parseInt(fm[1]);
+      const em = cleanLine.match(/Errors:\s*(\d+)/i); if (em) errors = parseInt(em[1]);
+      const sm = cleanLine.match(/(?:Skipped|Pending):\s*(\d+)/i); if (sm) skipped = parseInt(sm[1]);
       continue;
     }
     // Per-line summary fields: "Passed:  40", "Failed:  0", etc.
-    const passedLine = line.match(/^\s*Passed:\s*(\d+)/i);
+    const passedLine = cleanLine.match(/^\s*Passed:\s*(\d+)/i);
     if (passedLine) { passed = parseInt(passedLine[1]); continue; }
-    const failedLine = line.match(/^\s*Failed:\s*(\d+)/i);
+    const failedLine = cleanLine.match(/^\s*Failed:\s*(\d+)/i);
     if (failedLine) { failed = parseInt(failedLine[1]); continue; }
-    const errorsLine = line.match(/^\s*Errors:\s*(\d+)/i);
+    const errorsLine = cleanLine.match(/^\s*Errors:\s*(\d+)/i);
     if (errorsLine) { errors = parseInt(errorsLine[1]); continue; }
-    const skippedLine = line.match(/^\s*(?:Skipped|Pending):\s*(\d+)/i);
+    const skippedLine = cleanLine.match(/^\s*(?:Skipped|Pending):\s*(\d+)/i);
     if (skippedLine) { skipped = parseInt(skippedLine[1]); continue; }
     // Duration: "Elapsed:  1.37s" or "Total time: 0.42s"
     const timeMatch = line.match(/(?:Elapsed|Total time):\s*([\d.]+)s/i);
