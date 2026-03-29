@@ -417,9 +417,16 @@ func _read_stack_from_editor_ui() -> Array:
 	var debugger := _find_node_of_class(base, "ScriptEditorDebugger")
 	if debugger == null:
 		return []
+	# Strategy 1: find first Tree in the "Stack Trace" tab (Godot 4.5+, 1-column format)
+	var stack_tree := _find_stack_trace_tree(debugger)
+	if stack_tree != null:
+		var frames := _extract_stack_frames(stack_tree)
+		if not frames.is_empty():
+			return frames
+	# Strategy 2 (fallback): scan all Trees, check any column for a file path
 	var frames := []
 	for child in _get_all_children(debugger):
-		if not (child is Tree) or child.get_columns() < 2:
+		if not (child is Tree):
 			continue
 		var root: TreeItem = child.get_root()
 		if root == null:
@@ -427,18 +434,13 @@ func _read_stack_from_editor_ui() -> Array:
 		var first := root.get_first_child()
 		if first == null:
 			continue
-		# Validate: stack trees have a file path in col 1 (3-col) or col 0/1 (2-col)
 		var cols: int = child.get_columns()
-		var file_col: int = 1
-		var valid := false
-		if cols >= 3:
-			valid = _looks_like_file_path(first.get_text(1))
-		else:
-			valid = _looks_like_file_path(first.get_text(1))
-			if not valid and _looks_like_file_path(first.get_text(0)):
-				valid = true
-				file_col = 0
-		if not valid:
+		var file_col: int = -1
+		for c in range(cols):
+			if _looks_like_file_path(first.get_text(c)):
+				file_col = c
+				break
+		if file_col == -1:
 			continue
 		var item := first
 		while item != null:
@@ -447,12 +449,15 @@ func _read_stack_from_editor_ui() -> Array:
 				frame["function"] = item.get_text(0)
 				frame["file"] = item.get_text(1)
 				frame["line"] = item.get_text(2).to_int()
-			elif file_col == 1:
-				frame["function"] = item.get_text(0)
-				frame["file"] = item.get_text(1)
+			elif cols == 2:
+				if file_col == 1:
+					frame["function"] = item.get_text(0)
+					frame["file"] = item.get_text(1)
+				else:
+					frame["file"] = item.get_text(0)
+					frame["function"] = item.get_text(1)
 			else:
-				frame["file"] = item.get_text(0)
-				frame["function"] = item.get_text(1)
+				frame = _parse_single_column_stack_entry(item.get_text(0))
 			frame["id"] = frames.size()
 			frames.append(frame)
 			item = item.get_next()
@@ -467,9 +472,16 @@ func _read_locals_from_editor_ui() -> Array:
 	var debugger := _find_node_of_class(base, "ScriptEditorDebugger")
 	if debugger == null:
 		return []
+	# Strategy 1: find second Tree in the "Stack Trace" tab (Godot 4.5+, locals/inspector)
+	var locals_tree := _find_locals_tree(debugger)
+	if locals_tree != null:
+		var locals := _extract_locals_from_tree(locals_tree)
+		if not locals.is_empty():
+			return locals
+	# Strategy 2 (fallback): scan all Trees, skip stack trees and known non-locals trees
 	var locals := []
 	for child in _get_all_children(debugger):
-		if not (child is Tree) or child.get_columns() < 2:
+		if not (child is Tree):
 			continue
 		var root: TreeItem = child.get_root()
 		if root == null:
@@ -477,16 +489,25 @@ func _read_locals_from_editor_ui() -> Array:
 		var first := root.get_first_child()
 		if first == null:
 			continue
-		# Skip the stack tree (file path in col 1)
-		if _looks_like_file_path(first.get_text(1)):
+		var cols: int = child.get_columns()
+		# Skip stack trees (any column has a file path)
+		var is_stack := false
+		for c in range(cols):
+			if _looks_like_file_path(first.get_text(c)):
+				is_stack = true
+				break
+		if is_stack:
 			continue
-		# Skip trees where the first item has no name (profiler, etc.)
-		if first.get_text(0).strip_edges().is_empty():
+		# Skip trees where the first item has no name (profiler, monitors, etc.)
+		var first_text: String = first.get_text(0).strip_edges()
+		if first_text.is_empty() or first_text == "Time":
 			continue
 		var item := first
 		while item != null:
 			var name_text: String = item.get_text(0).strip_edges()
-			var val_text: String = item.get_text(1).strip_edges()
+			var val_text: String = ""
+			if cols >= 2:
+				val_text = item.get_text(1).strip_edges()
 			if name_text != "":
 				locals.append({"name": name_text, "value": val_text})
 			item = item.get_next()
@@ -499,8 +520,14 @@ func _find_node_of_class(root: Node, class_name_str: String, parent_class: Strin
 		if child.get_class() == class_name_str or child.is_class(class_name_str):
 			if parent_class == "":
 				return child
-			if child.get_parent() != null and (child.get_parent().get_class() == parent_class or child.get_parent().is_class(parent_class)):
-				return child
+			# Check ancestors up to 3 levels (handles intermediate containers like VBoxContainer)
+			var ancestor: Node = child.get_parent()
+			for _i in range(3):
+				if ancestor == null:
+					break
+				if ancestor.get_class() == parent_class or ancestor.is_class(parent_class):
+					return child
+				ancestor = ancestor.get_parent()
 	return null
 
 func _get_all_children(node: Node) -> Array:
@@ -516,3 +543,92 @@ func _get_all_children(node: Node) -> Array:
 func _looks_like_file_path(text: String) -> bool:
 	var t := text.strip_edges()
 	return t.begins_with("res://") or t.ends_with(".gd") or t.ends_with(".cs") or t.ends_with(".tscn")
+
+# Find the first Tree node inside the "Stack Trace" tab of the debugger (the stack tree)
+func _find_stack_trace_tree(debugger: Node) -> Tree:
+	for child in _get_all_children(debugger):
+		if child is TabContainer:
+			for tab_idx in range(child.get_tab_count()):
+				if child.get_tab_title(tab_idx).containsn("stack"):
+					var tab_control: Control = child.get_tab_control(tab_idx)
+					if tab_control == null:
+						continue
+					for sub in _get_all_children(tab_control):
+						if sub is Tree:
+							return sub
+	return null
+
+# Find the second Tree node inside the "Stack Trace" tab of the debugger (the locals/inspector tree)
+func _find_locals_tree(debugger: Node) -> Tree:
+	for child in _get_all_children(debugger):
+		if child is TabContainer:
+			for tab_idx in range(child.get_tab_count()):
+				if child.get_tab_title(tab_idx).containsn("stack"):
+					var tab_control: Control = child.get_tab_control(tab_idx)
+					if tab_control == null:
+						continue
+					var tree_count := 0
+					for sub in _get_all_children(tab_control):
+						if sub is Tree:
+							tree_count += 1
+							if tree_count == 2:
+								return sub
+	return null
+
+# Extract stack frames from a Tree, handling 1-col, 2-col, and 3-col formats
+func _extract_stack_frames(tree: Tree) -> Array:
+	var frames := []
+	var root: TreeItem = tree.get_root()
+	if root == null:
+		return frames
+	var cols: int = tree.get_columns()
+	var item := root.get_first_child()
+	while item != null:
+		var frame := {}
+		if cols >= 3:
+			frame["function"] = item.get_text(0)
+			frame["file"] = item.get_text(1)
+			frame["line"] = item.get_text(2).to_int()
+		elif cols == 2:
+			if _looks_like_file_path(item.get_text(1)):
+				frame["function"] = item.get_text(0)
+				frame["file"] = item.get_text(1)
+			else:
+				frame["file"] = item.get_text(0)
+				frame["function"] = item.get_text(1)
+		else:
+			frame = _parse_single_column_stack_entry(item.get_text(0))
+		frame["id"] = frames.size()
+		frames.append(frame)
+		item = item.get_next()
+	return frames
+
+# Parse a single-column stack entry in "file:line" or plain "file" format
+func _parse_single_column_stack_entry(text: String) -> Dictionary:
+	var t := text.strip_edges()
+	var frame := {"file": t, "function": "", "line": 0}
+	var colon_idx := t.rfind(":")
+	if colon_idx > 0:
+		var after_colon := t.substr(colon_idx + 1)
+		if after_colon.is_valid_int():
+			frame["file"] = t.substr(0, colon_idx)
+			frame["line"] = after_colon.to_int()
+	return frame
+
+# Extract locals name/value pairs from a Tree, handling 1-col and 2-col formats
+func _extract_locals_from_tree(tree: Tree) -> Array:
+	var locals := []
+	var root: TreeItem = tree.get_root()
+	if root == null:
+		return locals
+	var cols: int = tree.get_columns()
+	var item := root.get_first_child()
+	while item != null:
+		var name_text: String = item.get_text(0).strip_edges()
+		var val_text: String = ""
+		if cols >= 2:
+			val_text = item.get_text(1).strip_edges()
+		if name_text != "":
+			locals.append({"name": name_text, "value": val_text})
+		item = item.get_next()
+	return locals
