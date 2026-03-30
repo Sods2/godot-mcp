@@ -122,10 +122,11 @@ export function registerSignalTools(
     "List all signal connections on a node",
     {
       node_path: z.string().optional().describe("Node path (empty for root)"),
+      recursive: z.boolean().optional().describe("Also collect connections from descendant nodes (default: true)"),
     },
-    async ({ node_path }) => {
+    async ({ node_path, recursive }) => {
       try {
-        const result = await bridge.send<{ connections: Array<{ signal: string; from: string; to: string; method: string; flags: number }> }>("signal.list_connections", { path: node_path ?? "" });
+        const result = await bridge.send<{ connections: Array<{ signal: string; from: string; to: string; method: string; flags: number }> }>("signal.list_connections", { path: node_path ?? "", recursive: recursive ?? true });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };

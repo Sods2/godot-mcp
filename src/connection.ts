@@ -134,3 +134,11 @@ export class BridgeConnection {
 
 export const bridge = new BridgeConnection();
 bridge.connect();
+
+function cleanup() {
+  bridge.close();
+}
+
+process.on("SIGINT", cleanup);
+process.on("SIGTERM", cleanup);
+process.on("beforeExit", cleanup);

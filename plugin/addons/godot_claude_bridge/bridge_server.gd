@@ -16,6 +16,8 @@ var editor_interface: EditorInterface
 var _tcp_server: TCPServer
 var _client: StreamPeerTCP = null
 var _protocol = null
+var _last_message_time: float = 0.0
+const _CLIENT_TIMEOUT_SEC: float = 30.0
 
 # Handlers (populated in _ready)
 var _scene_handler
@@ -111,11 +113,19 @@ func _process(_delta: float) -> void:
 	# Process any deferred responses first
 	_process_deferred()
 
-	# Accept new connection if no client
-	if _client == null and _tcp_server.is_connection_available():
-		_client = _tcp_server.take_connection()
-		_protocol = _ProtocolScript.new()  # Fresh parser for new connection
-		print("[Claude Bridge] Client connected")
+	# Accept new connection, replacing stale client if needed
+	if _tcp_server.is_connection_available():
+		if _client != null:
+			var idle_time := Time.get_ticks_msec() / 1000.0 - _last_message_time
+			if idle_time > _CLIENT_TIMEOUT_SEC:
+				print("[Claude Bridge] Dropping stale client (idle %.1fs)" % idle_time)
+				_client.disconnect_from_host()
+				_client = null
+		if _client == null:
+			_client = _tcp_server.take_connection()
+			_protocol = _ProtocolScript.new()  # Fresh parser for new connection
+			_last_message_time = Time.get_ticks_msec() / 1000.0
+			print("[Claude Bridge] Client connected")
 
 	if _client == null:
 		return
@@ -134,6 +144,7 @@ func _process(_delta: float) -> void:
 	if available > 0:
 		var data := _client.get_data(available)
 		if data[0] == OK:
+			_last_message_time = Time.get_ticks_msec() / 1000.0
 			var messages: Array = _protocol.feed(data[1])
 			for msg in messages:
 				_handle_message(msg)

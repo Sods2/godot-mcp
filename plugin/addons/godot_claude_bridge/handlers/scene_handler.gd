@@ -133,8 +133,15 @@ func reparent_node(editor_interface: EditorInterface, params: Dictionary) -> Dic
 
 func open_scene(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var scene_path: String = params.get("path", "")
+	if scene_path == "":
+		return {"error": "path is required"}
+	if not FileAccess.file_exists(scene_path):
+		return {"error": "Scene file not found: " + scene_path}
 	editor_interface.open_scene_from_path(scene_path)
-	return {"success": true}
+	var open_scenes := editor_interface.get_open_scenes()
+	if scene_path not in open_scenes:
+		return {"error": "Failed to open scene: " + scene_path}
+	return {"success": true, "open_scenes": Array(open_scenes)}
 
 func save_scene(editor_interface: EditorInterface) -> Dictionary:
 	editor_interface.save_scene()

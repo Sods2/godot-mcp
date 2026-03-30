@@ -70,7 +70,21 @@ func list_connections(editor_interface: EditorInterface, params: Dictionary) -> 
 	var node: Node = root.get_node_or_null(node_path) if node_path != "" else root
 	if not node:
 		return {"error": "Node not found: " + node_path}
+	var recursive: bool = params.get("recursive", true)
 	var connections: Array = []
+	if recursive:
+		_collect_connections_recursive(node, root, connections)
+	else:
+		_collect_node_connections(node, root, connections)
+	return {"connections": connections}
+
+func _collect_connections_recursive(node: Node, root: Node, connections: Array) -> void:
+	_collect_node_connections(node, root, connections)
+	for child in node.get_children():
+		if child == root or child.owner == root:
+			_collect_connections_recursive(child, root, connections)
+
+func _collect_node_connections(node: Node, root: Node, connections: Array) -> void:
 	for sig in node.get_signal_list():
 		var sig_name: String = sig.get("name", "")
 		for conn in node.get_signal_connection_list(sig_name):
@@ -92,4 +106,3 @@ func list_connections(editor_interface: EditorInterface, params: Dictionary) -> 
 					"method": callable.get_method(),
 					"flags": conn.get("flags", 0)
 				})
-	return {"connections": connections}

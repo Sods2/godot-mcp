@@ -46,14 +46,22 @@ func scan_directory(dir_path: String) -> void:
 func resave_resource(res_path: String) -> void:
 	if not ResourceLoader.exists(res_path):
 		return
-	var resource := ResourceLoader.load(res_path)
+	var resource := ResourceLoader.load(res_path, "", ResourceLoader.CACHE_MODE_IGNORE)
 	if resource == null:
 		errors += 1
-		error_files.append(res_path)
+		var missing_deps: Array[String] = []
+		for dep in ResourceLoader.get_dependencies(res_path):
+			var dep_path: String = dep.get_slice("::", 0)
+			if dep_path != "" and not ResourceLoader.exists(dep_path):
+				missing_deps.append(dep_path)
+		var detail: String = res_path
+		if not missing_deps.is_empty():
+			detail += " (missing deps: " + ", ".join(missing_deps) + ")"
+		error_files.append(detail)
 		return
 	var err := ResourceSaver.save(resource, res_path)
 	if err != OK:
 		errors += 1
-		error_files.append(res_path)
+		error_files.append(res_path + " (save error: " + error_string(err) + ")")
 	else:
 		processed += 1

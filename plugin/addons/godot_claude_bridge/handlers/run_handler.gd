@@ -12,6 +12,9 @@ func play(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 			return {"error": "Scene file not found: " + scene_path}
 		if not (scene_path.ends_with(".tscn") or scene_path.ends_with(".scn")):
 			return {"error": "Not a scene file: " + scene_path}
+		if not scene_path.begins_with("res://"):
+			return {"error": "Scene path must use res:// format, got: " + scene_path}
+		editor_interface.get_resource_filesystem().scan()
 		editor_interface.play_custom_scene(scene_path)
 	else:
 		if editor_interface.get_edited_scene_root() == null:
