@@ -66,19 +66,67 @@ function parseHeaderAttrs(attrStr: string): Record<string, string> {
   return attrs;
 }
 
+function countBraceDepth(s: string): number {
+  let depth = 0;
+  let inStr = false;
+  let escaped = false;
+  for (const ch of s) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === "\\") { escaped = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") depth--;
+  }
+  return depth;
+}
+
 function parseProperties(body: string): Record<string, string> {
   const props: Record<string, string> = {};
   if (!body) return props;
 
+  let currentKey: string | null = null;
+  let currentValue = "";
+  let depth = 0;
+
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
+
+    if (currentKey !== null) {
+      // Accumulating a multi-line value (dict or array)
+      currentValue += "\n" + line;
+      depth += countBraceDepth(trimmed);
+      if (depth <= 0) {
+        props[currentKey] = currentValue.trim();
+        currentKey = null;
+        currentValue = "";
+        depth = 0;
+      }
+      continue;
+    }
+
     if (!trimmed || trimmed.startsWith(";")) continue;
     const eqIndex = trimmed.indexOf("=");
     if (eqIndex === -1) continue;
     const key = trimmed.slice(0, eqIndex).trim();
     const value = trimmed.slice(eqIndex + 1).trim();
-    props[key] = value;
+
+    const d = countBraceDepth(value);
+    if (d > 0) {
+      // Value opens a multi-line block
+      currentKey = key;
+      currentValue = value;
+      depth = d;
+    } else {
+      props[key] = value;
+    }
   }
+
+  // Handle unclosed block (malformed .tscn)
+  if (currentKey !== null) {
+    props[currentKey] = currentValue.trim();
+  }
+
   return props;
 }
 

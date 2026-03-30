@@ -137,17 +137,53 @@ function parseGutOutput(output: string): Omit<RunResults, "framework" | "raw_out
   let skipped = 0;
   let duration_ms = 0;
   let currentSuite = "";
+  let suiteTestsStart = 0; // index into tests[] where current suite began
 
   for (const line of output.split("\n")) {
-    // Track current suite from "Running: test_player.gd" or "Script: res://..."
-    const suiteMatch = line.match(/^\s*(?:Running|Script):\s*(.+\.gd)/i);
-    if (suiteMatch) {
-      currentSuite = suiteMatch[1];
+    const cleanLine = line.replace(/[^\x20-\x7E]/g, "");
+
+    // Suite: bare res:// path to a .gd file (GUT 9.x outputs just the path)
+    const suitePath = cleanLine.match(/^\s*(res:\/\/\S+\.gd)\s*$/i);
+    if (suitePath) {
+      currentSuite = suitePath[1];
+      suiteTestsStart = tests.length;
       continue;
     }
 
-    // GUT 9.x format: "  - test_something: PASSED" or "  - test_something: FAILED"
-    const dashResult = line.match(/^\s*-\s+(\S+)\s*:\s*(PASSED|FAILED|PENDING)/i);
+    // Legacy suite tracking: "Running: test_player.gd" or "Script: res://..."
+    const legacySuite = cleanLine.match(/^\s*(?:Running|Script):\s*(.+\.gd)/i);
+    if (legacySuite) {
+      currentSuite = legacySuite[1];
+      suiteTestsStart = tests.length;
+      continue;
+    }
+
+    // GUT 9.x individual test entry: "* test_name"
+    const starTest = cleanLine.match(/^\s*\*\s+(\w+)\s*$/);
+    if (starTest) {
+      tests.push({ name: starTest[1], suite: currentSuite, status: "passed" });
+      continue;
+    }
+
+    // Per-script summary: "26/26 passed." or "24/26 passed."
+    const scriptSummary = cleanLine.match(/^\s*(\d+)\/(\d+)\s+passed\b/i);
+    if (scriptSummary) {
+      const scriptPassed = parseInt(scriptSummary[1]);
+      const scriptTotal = parseInt(scriptSummary[2]);
+      const scriptFailed = scriptTotal - scriptPassed;
+      // Mark the last scriptFailed tests in this suite as failed
+      if (scriptFailed > 0) {
+        const endIdx = tests.length;
+        const markStart = Math.max(suiteTestsStart, endIdx - scriptFailed);
+        for (let i = markStart; i < endIdx; i++) {
+          tests[i].status = "failed";
+        }
+      }
+      continue;
+    }
+
+    // Dash format (some GUT versions): "  - test_name: PASSED"
+    const dashResult = cleanLine.match(/^\s*-\s+(\S+)\s*:\s*(PASSED|FAILED|PENDING)/i);
     if (dashResult) {
       const s = dashResult[2].toUpperCase();
       const status: TestResult["status"] = s === "PASSED" ? "passed" : s === "PENDING" ? "skipped" : "failed";
@@ -155,20 +191,14 @@ function parseGutOutput(output: string): Omit<RunResults, "framework" | "raw_out
       continue;
     }
 
-    // Alternate bracket format: "[PASS]  test_something" or "[FAIL]  test_something"
-    const passLine = line.match(/\[PASS\]\s+(\S+)/);
-    if (passLine) {
-      tests.push({ name: passLine[1], suite: currentSuite, status: "passed" });
-      continue;
-    }
-    const failLine = line.match(/\[FAIL\]\s+(\S+)/);
-    if (failLine) {
-      tests.push({ name: failLine[1], suite: currentSuite, status: "failed" });
-      continue;
-    }
+    // Bracket format: "[PASS] test_name" or "[FAIL] test_name"
+    const passLine = cleanLine.match(/\[PASS\]\s+(\S+)/);
+    if (passLine) { tests.push({ name: passLine[1], suite: currentSuite, status: "passed" }); continue; }
+    const failLine = cleanLine.match(/\[FAIL\]\s+(\S+)/);
+    if (failLine) { tests.push({ name: failLine[1], suite: currentSuite, status: "failed" }); continue; }
 
-    // Bare format: "PASSED  test_something" or "FAILED  test_something"
-    const bareResult = line.match(/^\s*(PASSED|FAILED|PENDING)\s+(\S+)/i);
+    // Bare format: "PASSED test_name" or "FAILED test_name"
+    const bareResult = cleanLine.match(/^\s*(PASSED|FAILED|PENDING)\s+(\S+)/i);
     if (bareResult) {
       const s = bareResult[1].toUpperCase();
       const status: TestResult["status"] = s === "PASSED" ? "passed" : s === "PENDING" ? "skipped" : "failed";
@@ -176,10 +206,17 @@ function parseGutOutput(output: string): Omit<RunResults, "framework" | "raw_out
       continue;
     }
 
-    // Strip residual non-printable chars before summary parsing (handles incomplete ANSI)
-    const cleanLine = line.replace(/[^\x20-\x7E]/g, "");
+    // GUT 9.x Run Summary: "Passing Tests        41" / "Failing Tests        0"
+    const passingTests = cleanLine.match(/^\s*Passing Tests\s+(\d+)/i);
+    if (passingTests) { passed = parseInt(passingTests[1]); continue; }
+    const failingTests = cleanLine.match(/^\s*Failing Tests\s+(\d+)/i);
+    if (failingTests) { failed = parseInt(failingTests[1]); continue; }
 
-    // Inline summary: "Passed:  2  Failed:  1  Errors:  0  Warnings:  0  Skipped:  0"
+    // GUT 9.x duration: "Time              0.465s" (spaces, no colon)
+    const gutTime = cleanLine.match(/^\s*Time\s+([\d.]+)s/i);
+    if (gutTime) { duration_ms = Math.round(parseFloat(gutTime[1]) * 1000); continue; }
+
+    // Inline summary (older GUT): "Passed:  2  Failed:  1  Errors:  0  Skipped:  0"
     if (/Passed:/i.test(cleanLine) && /Failed:/i.test(cleanLine)) {
       const pm = cleanLine.match(/Passed:\s*(\d+)/i); if (pm) passed = parseInt(pm[1]);
       const fm = cleanLine.match(/Failed:\s*(\d+)/i); if (fm) failed = parseInt(fm[1]);
@@ -187,22 +224,21 @@ function parseGutOutput(output: string): Omit<RunResults, "framework" | "raw_out
       const sm = cleanLine.match(/(?:Skipped|Pending):\s*(\d+)/i); if (sm) skipped = parseInt(sm[1]);
       continue;
     }
-    // Per-line summary fields: "Passed:  40", "Failed:  0", etc.
-    // No leading anchor — GUT may decorate lines with prefixes after BBCode stripping.
-    const passedLine = cleanLine.match(/Passed:\s*(\d+)/i);
-    if (passedLine) { passed = parseInt(passedLine[1]); continue; }
-    const failedLine = cleanLine.match(/Failed:\s*(\d+)/i);
-    if (failedLine) { failed = parseInt(failedLine[1]); continue; }
+    // Per-line with colon (older GUT): "Passed:  40", "Failed:  0", etc.
+    const passedColon = cleanLine.match(/Passed:\s*(\d+)/i);
+    if (passedColon) { passed = parseInt(passedColon[1]); continue; }
+    const failedColon = cleanLine.match(/Failed:\s*(\d+)/i);
+    if (failedColon) { failed = parseInt(failedColon[1]); continue; }
     const errorsLine = cleanLine.match(/Errors:\s*(\d+)/i);
     if (errorsLine) { errors = parseInt(errorsLine[1]); continue; }
     const skippedLine = cleanLine.match(/(?:Skipped|Pending):\s*(\d+)/i);
     if (skippedLine) { skipped = parseInt(skippedLine[1]); continue; }
-    // Duration: "Elapsed:  1.37s" or "Total time: 0.42s"
-    const timeMatch = line.match(/(?:Elapsed|Total time):\s*([\d.]+)s/i);
-    if (timeMatch) { duration_ms = Math.round(parseFloat(timeMatch[1]) * 1000); continue; }
+    // Duration with colon (older GUT): "Elapsed:  1.37s" or "Total time: 0.42s"
+    const timeColon = line.match(/(?:Elapsed|Total time):\s*([\d.]+)s/i);
+    if (timeColon) { duration_ms = Math.round(parseFloat(timeColon[1]) * 1000); continue; }
   }
 
-  // Fallback: if summary counts not found but individual test lines were parsed, derive from them
+  // Fallback: derive counts from test list if summary not captured
   if (passed === 0 && failed === 0 && tests.length > 0) {
     passed = tests.filter(t => t.status === "passed").length;
     failed = tests.filter(t => t.status === "failed").length;
