@@ -286,12 +286,13 @@ export function registerFileTools(
           "--headless",
           "--path",
           projectDir,
+          "--script",
+          script_path,
           "--check-only",
         ];
         if (include_warnings) {
           args.push("-W");
         }
-        args.push(script_path);
 
         const { stdout, stderr } = await execFileAsync(
           gp,
