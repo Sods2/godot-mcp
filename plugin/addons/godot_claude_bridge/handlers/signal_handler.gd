@@ -89,10 +89,18 @@ func _collect_node_connections(node: Node, root: Node, connections: Array) -> vo
 		var sig_name: String = sig.get("name", "")
 		for conn in node.get_signal_connection_list(sig_name):
 			var callable: Callable = conn.get("callable", Callable())
-			if not callable.is_valid():
-				continue
+			var is_valid := callable.is_valid()
 			var target_obj = callable.get_object()
 			if target_obj == null:
+				# Target freed or method missing — still report with available info
+				connections.append({
+					"signal": sig_name,
+					"from": str(root.get_path_to(node)),
+					"to": "",
+					"method": callable.get_method(),
+					"flags": conn.get("flags", 0),
+					"valid": false
+				})
 				continue
 			# Filter out editor-internal connections (target not owned by scene)
 			if target_obj is Node:
@@ -104,5 +112,6 @@ func _collect_node_connections(node: Node, root: Node, connections: Array) -> vo
 					"from": str(root.get_path_to(node)),
 					"to": str(root.get_path_to(target_node)),
 					"method": callable.get_method(),
-					"flags": conn.get("flags", 0)
+					"flags": conn.get("flags", 0),
+					"valid": is_valid
 				})

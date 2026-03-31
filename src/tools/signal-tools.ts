@@ -126,8 +126,31 @@ export function registerSignalTools(
     },
     async ({ node_path, recursive }) => {
       try {
-        const result = await bridge.send<{ connections: Array<{ signal: string; from: string; to: string; method: string; flags: number }> }>("signal.list_connections", { path: node_path ?? "", recursive: recursive ?? true });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        type RuntimeConn = { signal: string; from: string; to: string; method: string; flags: number; valid?: boolean };
+        const result = await bridge.send<{ connections: RuntimeConn[] }>("signal.list_connections", { path: node_path ?? "", recursive: recursive ?? true });
+        const connections = result.connections;
+
+        // Merge with TSCN file to catch connections filtered out by the runtime
+        try {
+          const status = await bridge.send<{ open_scenes?: string[] }>("editor.status", {});
+          const openScenes = status.open_scenes ?? [];
+          if (openScenes.length > 0) {
+            const filePath = resolveResPath(resolveProjectPath(), openScenes[0]);
+            const content = await readFile(filePath, "utf-8");
+            const scene = _parser.parse(content);
+            for (const tscnConn of scene.connections) {
+              const key = `${tscnConn.signal}|${tscnConn.from}|${tscnConn.to}|${tscnConn.method}`;
+              const alreadyPresent = connections.some(c => `${c.signal}|${c.from}|${c.to}|${c.method}` === key);
+              if (!alreadyPresent) {
+                connections.push({ signal: tscnConn.signal, from: tscnConn.from, to: tscnConn.to, method: tscnConn.method, flags: tscnConn.flags ?? 0, valid: false });
+              }
+            }
+          }
+        } catch {
+          // TSCN fallback is best-effort; proceed with runtime results
+        }
+
+        return { content: [{ type: "text", text: JSON.stringify({ connections }, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${(e as Error).message}` }], isError: true };
       }
