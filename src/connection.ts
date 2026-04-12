@@ -8,7 +8,8 @@ const DEFAULT_HOST = "127.0.0.1";
 const REQUEST_TIMEOUT_MS = 10000;
 
 interface PendingRequest {
-  resolve: (value: unknown) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  resolve: (value: any) => void;
   reject: (reason: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
