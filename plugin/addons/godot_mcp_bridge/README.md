@@ -1,5 +1,7 @@
 # MCP Bridge - Godot EditorPlugin
 
+> Part of [godot-mcp](https://github.com/Sods2/godot-mcp) &mdash; v0.1.0
+
 A Godot 4.x editor plugin that exposes editor capabilities via a local TCP bridge using JSON-RPC over Content-Length framing.
 
 ## Installation
@@ -118,3 +120,7 @@ The plugin runs a TCP server inside the Godot editor process. The external MCP s
 ## Requirements
 
 - Godot 4.3 or later
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

@@ -1,9 +1,13 @@
 # Exclude dev-only files from git archive / GitHub ZIP downloads
 .github/             export-ignore
 .claude/             export-ignore
+.gitignore           export-ignore
+.gitattributes       export-ignore
+.DS_Store            export-ignore
 CLAUDE.md            export-ignore
 MANUAL_TESTS.md      export-ignore
 .prettierrc          export-ignore
 eslint.config.mjs    export-ignore
 .mcp.json.example    export-ignore
-src/__tests__/       export-ignore
+docs/                export-ignore
+src/**/__tests__/    export-ignore

@@ -2,7 +2,7 @@
   "mcpServers": {
     "godot": {
       "command": "node",
-      "args": ["PATH_TO_HOME/.claude/mcp-servers/godot-claude-mcp/build/index.js"],
+      "args": ["PATH_TO_HOME/.claude/mcp-servers/godot-mcp/build/index.js"],
       "env": {
         "GODOT_PATH": "PATH_TO_GODOT_EXECUTABLE"
       }

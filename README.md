@@ -1,5 +1,8 @@
 # godot-mcp
 
+[![CI](https://github.com/Sods2/godot-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/Sods2/godot-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A Model Context Protocol (MCP) server that gives AI assistants full integration with the Godot game engine IDE. Interact with live editor state, parse and modify scene files, run projects, capture screenshots, debug with breakpoints, profile performance, and more.
 
 **77 tools** across 15 categories, covering the full Godot development workflow.

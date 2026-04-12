@@ -2,6 +2,13 @@
   "name": "godot-mcp",
   "version": "0.1.0",
   "description": "MCP server for full Godot IDE integration",
+  "license": "MIT",
+  "author": "Sods2",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sods2/godot-mcp.git"
+  },
+  "keywords": ["mcp", "godot", "game-engine", "model-context-protocol", "editor"],
   "type": "module",
   "main": "build/index.js",
   "scripts": {
