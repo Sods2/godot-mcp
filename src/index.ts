@@ -26,7 +26,7 @@ import { registerProfilerTools } from "./tools/profiler-tools.js";
 import { resolveProjectPath } from "./project-utils.js";
 
 const server = new McpServer({
-  name: "godot-claude-mcp",
+  name: "godot-mcp",
   version: "0.1.0",
 });
 

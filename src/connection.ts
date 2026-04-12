@@ -39,7 +39,7 @@ export class BridgeConnection {
   async send<T = unknown>(method: string, params: unknown = {}): Promise<T> {
     if (!this.connected) {
       throw new Error(
-        "EditorPlugin not connected (is godot_claude_bridge addon enabled in your project?)"
+        "EditorPlugin not connected (is godot_mcp_bridge addon enabled in your project?)"
       );
     }
     const id = this.nextId++;

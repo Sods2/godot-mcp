@@ -4,7 +4,7 @@ import type { BridgeConnection } from "../connection.js";
 import type { AddNodeResponse, RemoveNodeResponse, SetPropertyResponse, SaveSceneResponse } from "../types/bridge-responses.js";
 
 const NOT_CONNECTED_MSG =
-  "Editor plugin not connected — open project in Godot with godot_claude_bridge addon enabled, or use godot_add_node_to_file for file-based editing";
+  "Editor plugin not connected — open project in Godot with godot_mcp_bridge addon enabled, or use godot_add_node_to_file for file-based editing";
 
 function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };

@@ -15,7 +15,7 @@ describe("mcp-protocol", () => {
 
   beforeEach(async () => {
     mockBridge = createMockBridge({ connected: true });
-    server = new McpServer({ name: "godot-claude-mcp-test", version: "0.0.1" });
+    server = new McpServer({ name: "godot-mcp-test", version: "0.0.1" });
 
     // Register a subset of tools for protocol-level testing
     registerDebugTools(server, mockBridge);

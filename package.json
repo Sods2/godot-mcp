@@ -1,7 +1,7 @@
 {
-  "name": "godot-claude-mcp",
+  "name": "godot-mcp",
   "version": "0.1.0",
-  "description": "MCP server for full Godot IDE integration with Claude",
+  "description": "MCP server for full Godot IDE integration",
   "type": "module",
   "main": "build/index.js",
   "scripts": {

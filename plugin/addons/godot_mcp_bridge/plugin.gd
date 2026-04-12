@@ -1,8 +1,8 @@
 @tool
 extends EditorPlugin
 
-const _DebuggerScript = preload("res://addons/godot_claude_bridge/debugger_plugin.gd")
-const _BridgeServerScript = preload("res://addons/godot_claude_bridge/bridge_server.gd")
+const _DebuggerScript = preload("res://addons/godot_mcp_bridge/debugger_plugin.gd")
+const _BridgeServerScript = preload("res://addons/godot_mcp_bridge/bridge_server.gd")
 
 var _bridge_server
 var _debugger_plugin

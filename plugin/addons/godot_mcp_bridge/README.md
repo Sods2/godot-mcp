@@ -1,13 +1,13 @@
-# Claude Bridge - Godot EditorPlugin
+# MCP Bridge - Godot EditorPlugin
 
-A Godot 4.x editor plugin that exposes editor capabilities to Claude via a local TCP bridge using JSON-RPC over Content-Length framing.
+A Godot 4.x editor plugin that exposes editor capabilities via a local TCP bridge using JSON-RPC over Content-Length framing.
 
 ## Installation
 
-1. Copy the `addons/godot_claude_bridge/` folder into your Godot project's `addons/` directory
+1. Copy the `addons/godot_mcp_bridge/` folder into your Godot project's `addons/` directory
 2. Open your project in the Godot editor
 3. Go to **Project > Project Settings > Plugins**
-4. Enable **Claude Bridge**
+4. Enable **MCP Bridge**
 
 The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 

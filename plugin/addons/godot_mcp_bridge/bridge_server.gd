@@ -1,16 +1,16 @@
 @tool
 extends Node
 
-const _ProtocolScript = preload("res://addons/godot_claude_bridge/protocol.gd")
-const _SceneHandlerScript = preload("res://addons/godot_claude_bridge/handlers/scene_handler.gd")
-const _InspectorHandlerScript = preload("res://addons/godot_claude_bridge/handlers/inspector_handler.gd")
-const _ScriptHandlerScript = preload("res://addons/godot_claude_bridge/handlers/script_handler.gd")
-const _RunHandlerScript = preload("res://addons/godot_claude_bridge/handlers/run_handler.gd")
-const _ScreenshotHandlerScript = preload("res://addons/godot_claude_bridge/handlers/screenshot_handler.gd")
-const _SignalHandlerScript = preload("res://addons/godot_claude_bridge/handlers/signal_handler.gd")
-const _AnimationHandlerScript = preload("res://addons/godot_claude_bridge/handlers/animation_handler.gd")
-const _DebugHandlerScript = preload("res://addons/godot_claude_bridge/handlers/debug_handler.gd")
-const _ProfilerHandlerScript = preload("res://addons/godot_claude_bridge/handlers/profiler_handler.gd")
+const _ProtocolScript = preload("res://addons/godot_mcp_bridge/protocol.gd")
+const _SceneHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/scene_handler.gd")
+const _InspectorHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/inspector_handler.gd")
+const _ScriptHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/script_handler.gd")
+const _RunHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/run_handler.gd")
+const _ScreenshotHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/screenshot_handler.gd")
+const _SignalHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/signal_handler.gd")
+const _AnimationHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/animation_handler.gd")
+const _DebugHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/debug_handler.gd")
+const _ProfilerHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/profiler_handler.gd")
 
 var editor_interface: EditorInterface
 var _tcp_server: TCPServer

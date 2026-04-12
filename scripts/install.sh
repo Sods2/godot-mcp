@@ -3,7 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-DEST="$HOME/.claude/mcp-servers/godot-claude-mcp"
+DEST="$HOME/.claude/mcp-servers/godot-mcp"
 
 # Build first
 cd "$PROJECT_DIR"

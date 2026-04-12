@@ -1,5 +1,5 @@
 #!/usr/bin/env -S godot --headless --script
-## MCP built-in test runner for godot-claude-mcp
+## MCP built-in test runner for godot-mcp
 ## Usage: godot --headless --path <project> -s <path_to_this_file> [-- --test-dir=res://tests --test-filter=my_test]
 ## Discovers GDScript files whose methods start with "test_", runs them, outputs JSON results to stdout.
 extends SceneTree

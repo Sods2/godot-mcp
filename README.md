@@ -1,6 +1,6 @@
-# godot-claude-mcp
+# godot-mcp
 
-A Model Context Protocol (MCP) server that gives Claude full integration with the Godot game engine IDE. Interact with live editor state, parse and modify scene files, run projects, capture screenshots, debug with breakpoints, profile performance, and more — all from Claude.
+A Model Context Protocol (MCP) server that gives AI assistants full integration with the Godot game engine IDE. Interact with live editor state, parse and modify scene files, run projects, capture screenshots, debug with breakpoints, profile performance, and more.
 
 **77 tools** across 15 categories, covering the full Godot development workflow.
 
@@ -44,13 +44,13 @@ Many tools work in a hybrid mode: they use the live editor bridge when available
 ### 1. Build and install the MCP server
 
 ```bash
-git clone https://github.com/Sods2/godot-claude-mcp.git
-cd godot-claude-mcp
+git clone https://github.com/Sods2/godot-mcp.git
+cd godot-mcp
 npm install
 ./scripts/install.sh
 ```
 
-The install script compiles TypeScript, copies the build output to `~/.claude/mcp-servers/godot-claude-mcp/`, and installs production dependencies there.
+The install script compiles TypeScript, copies the build output to `~/.claude/mcp-servers/godot-mcp/`, and installs production dependencies there.
 
 ### 2. Add the server to your project's `.mcp.json`
 
@@ -61,7 +61,7 @@ Create or update `.mcp.json` in your Claude project root:
   "mcpServers": {
     "godot": {
       "command": "node",
-      "args": ["~/.claude/mcp-servers/godot-claude-mcp/build/index.js"],
+      "args": ["~/.claude/mcp-servers/godot-mcp/build/index.js"],
       "env": {
         "GODOT_PATH": "/path/to/godot"
       }
@@ -91,7 +91,7 @@ Create or update `.mcp.json` in your Claude project root:
 
 The plugin is required for tools that interact with the running Godot editor (live scene tree edits, screenshots, script insertion, etc.). File-based tools work without it.
 
-1. Copy `plugin/addons/godot_claude_bridge/` into your Godot project's `addons/` directory
+1. Copy `plugin/addons/godot_mcp_bridge/` into your Godot project's `addons/` directory
 2. Open the project in the Godot editor
 3. Go to **Project > Project Settings > Plugins**
 4. Enable **Claude Bridge**
