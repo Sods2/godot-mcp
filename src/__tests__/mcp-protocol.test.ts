@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createMockBridge } from "./helpers/mock-bridge.js";
-import { createMockProcessManager } from "./helpers/mock-process-manager.js";
 import { registerDebugTools } from "../tools/debug-tools.js";
 import { registerEditorTools } from "../tools/editor-tools.js";
 import { registerScriptTools } from "../tools/script-tools.js";

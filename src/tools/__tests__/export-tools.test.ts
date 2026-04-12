@@ -69,7 +69,7 @@ describe("export-tools", () => {
     it("calls godot with correct export args for release build", async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-          (cb as Function)(null, { stdout: "Export OK", stderr: "" });
+          (cb as (...args: unknown[]) => void)(null, { stdout: "Export OK", stderr: "" });
           return {} as ReturnType<typeof execFile>;
         }
       );
@@ -90,7 +90,7 @@ describe("export-tools", () => {
     it("uses --export-debug for debug builds", async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-          (cb as Function)(null, { stdout: "", stderr: "" });
+          (cb as (...args: unknown[]) => void)(null, { stdout: "", stderr: "" });
           return {} as ReturnType<typeof execFile>;
         }
       );
@@ -119,7 +119,7 @@ describe("export-tools", () => {
     it("runs godot headless script and parses JSON output", async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-          (cb as Function)(null, {
+          (cb as (...args: unknown[]) => void)(null, {
             stdout: 'Some noise\n{"success":true,"output":"res://lib.meshlib"}\n',
             stderr: "",
           });
@@ -139,7 +139,7 @@ describe("export-tools", () => {
     it("returns raw output when no JSON found", async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-          (cb as Function)(null, { stdout: "Export completed", stderr: "" });
+          (cb as (...args: unknown[]) => void)(null, { stdout: "Export completed", stderr: "" });
           return {} as ReturnType<typeof execFile>;
         }
       );

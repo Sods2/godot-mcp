@@ -203,7 +203,7 @@ describe("test-tools", () => {
         vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
         vi.mocked(execFile).mockImplementation(
           (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-            (cb as Function)(null, { stdout: GUT_OUTPUT, stderr: "" });
+            (cb as (...args: unknown[]) => void)(null, { stdout: GUT_OUTPUT, stderr: "" });
             return {} as ReturnType<typeof execFile>;
           }
         );
@@ -224,7 +224,7 @@ describe("test-tools", () => {
         vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
         vi.mocked(execFile).mockImplementation(
           (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-            (cb as Function)(null, { stdout: GUT_BBCODE_OUTPUT, stderr: "" });
+            (cb as (...args: unknown[]) => void)(null, { stdout: GUT_BBCODE_OUTPUT, stderr: "" });
             return {} as ReturnType<typeof execFile>;
           }
         );
@@ -247,7 +247,7 @@ describe("test-tools", () => {
         });
         vi.mocked(execFile).mockImplementation(
           (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-            (cb as Function)(null, { stdout: GDUNIT4_OUTPUT, stderr: "" });
+            (cb as (...args: unknown[]) => void)(null, { stdout: GDUNIT4_OUTPUT, stderr: "" });
             return {} as ReturnType<typeof execFile>;
           }
         );
@@ -266,7 +266,7 @@ describe("test-tools", () => {
         vi.mocked(access).mockRejectedValue(new Error("ENOENT"));
         vi.mocked(execFile).mockImplementation(
           (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-            (cb as Function)(null, { stdout: BUILTIN_OUTPUT, stderr: "" });
+            (cb as (...args: unknown[]) => void)(null, { stdout: BUILTIN_OUTPUT, stderr: "" });
             return {} as ReturnType<typeof execFile>;
           }
         );
@@ -286,7 +286,7 @@ describe("test-tools", () => {
       vi.mocked(access).mockRejectedValue(new Error("ENOENT"));
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-          (cb as Function)(null, {
+          (cb as (...args: unknown[]) => void)(null, {
             stdout:
               '{"framework":"builtin","passed":0,"failed":1,"errors":0,"skipped":0,"duration_ms":10,"tests":[]}',
             stderr: "",

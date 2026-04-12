@@ -157,7 +157,7 @@ describe("file-tools", () => {
     it("runs godot --check-only and reports valid script", async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-          (cb as Function)(null, { stdout: "", stderr: "" });
+          (cb as (...args: unknown[]) => void)(null, { stdout: "", stderr: "" });
           return {} as ReturnType<typeof execFile>;
         }
       );
@@ -178,7 +178,7 @@ describe("file-tools", () => {
             stdout: "",
             stderr: "ERROR: parse error at line 5",
           });
-          (cb as Function)(err);
+          (cb as (...args: unknown[]) => void)(err);
           return {} as ReturnType<typeof execFile>;
         }
       );
@@ -193,7 +193,7 @@ describe("file-tools", () => {
     it("detects SCRIPT ERROR in output even when exit code is 0", async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-          (cb as Function)(null, { stdout: "SCRIPT ERROR: 'bad_var' is not declared in the current scope.\n   at: res://bad.gd:10", stderr: "" });
+          (cb as (...args: unknown[]) => void)(null, { stdout: "SCRIPT ERROR: 'bad_var' is not declared in the current scope.\n   at: res://bad.gd:10", stderr: "" });
           return {} as ReturnType<typeof execFile>;
         }
       );
@@ -208,7 +208,7 @@ describe("file-tools", () => {
     it("detects project-level load error even when exit code is 0", async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-          (cb as Function)(null, { stdout: "", stderr: "ERROR: Failed to load resource: res://scenes/main.tscn" });
+          (cb as (...args: unknown[]) => void)(null, { stdout: "", stderr: "ERROR: Failed to load resource: res://scenes/main.tscn" });
           return {} as ReturnType<typeof execFile>;
         }
       );

@@ -8,7 +8,7 @@ const DEFAULT_HOST = "127.0.0.1";
 const REQUEST_TIMEOUT_MS = 10000;
 
 interface PendingRequest {
-  resolve: (value: any) => void;
+  resolve: (value: unknown) => void;
   reject: (reason: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }

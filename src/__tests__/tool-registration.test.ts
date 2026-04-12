@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { createMockServer } from "./helpers/mock-server.js";
 import { createMockBridge } from "./helpers/mock-bridge.js";
 import { createMockProcessManager } from "./helpers/mock-process-manager.js";
@@ -181,7 +181,7 @@ describe("tool-registration", () => {
     registerTestTools(mockServer.server, godotPath);
     registerExportTools(mockServer.server, godotPath);
 
-    for (const [_name, tool] of mockServer.getTools()) {
+    for (const [, tool] of mockServer.getTools()) {
       expect(tool.description.length).toBeGreaterThan(0);
     }
   });

@@ -15,12 +15,13 @@ export function stripBBCode(text: string): string {
  * Strip ANSI escape codes from a string.
  */
 export function stripAnsi(text: string): string {
-  // eslint-disable-next-line no-control-regex
+  /* eslint-disable no-control-regex */
   return text
     .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")   // CSI sequences (covers all single-letter endings)
     .replace(/\x1b\][^\x07]*\x07/g, "")        // OSC sequences (e.g. terminal title)
     .replace(/\x1b[()][0-9A-B]/g, "")           // Character set selection
     .replace(/\x1b[\x40-\x5f]/g, "");           // Other two-byte escape sequences
+  /* eslint-enable no-control-regex */
 }
 
 /**
