@@ -31,6 +31,10 @@ const PLATFORM_PATHS: Record<string, string[]> = {
       os.homedir(),
       "Library/Application Support/Steam/steamapps/common/Godot Engine/Godot.app/Contents/MacOS/Godot"
     ),
+    // Non-standard user locations (e.g. ~/Documents/Claude/Games/Godot.app)
+    path.join(os.homedir(), "Documents/Claude/Games/Godot.app/Contents/MacOS/Godot"),
+    path.join(os.homedir(), "Downloads/Godot.app/Contents/MacOS/Godot"),
+    path.join(os.homedir(), "Desktop/Godot.app/Contents/MacOS/Godot"),
   ],
   win32: [
     "C:\\Program Files\\Godot\\Godot.exe",
@@ -57,6 +61,33 @@ async function isExecutable(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function findGodotInUserDirs(): Promise<string | null> {
+  const searchDirs = [
+    path.join(os.homedir(), "Documents"),
+    path.join(os.homedir(), "Downloads"),
+    path.join(os.homedir(), "Desktop"),
+  ];
+  for (const dir of searchDirs) {
+    try {
+      const { stdout } = await execFileAsync(
+        "find",
+        [dir, "-maxdepth", "4", "-name", "Godot*.app", "-type", "d"],
+        { timeout: 8000 }
+      );
+      const appPaths = stdout.trim().split("\n").filter(Boolean);
+      for (const appPath of appPaths) {
+        const exe = path.join(appPath, "Contents/MacOS/Godot");
+        if ((await isExecutable(exe)) && (await validateGodot(exe))) {
+          return exe;
+        }
+      }
+    } catch {
+      // dir doesn't exist or find timed out — skip
+    }
+  }
+  return null;
 }
 
 async function validateGodot(godotPath: string): Promise<boolean> {
@@ -102,8 +133,16 @@ export async function findGodotPath(): Promise<string> {
     }
   }
 
+  // 4. Dynamic search in ~/Documents, ~/Downloads, ~/Desktop (macOS only)
+  if (process.platform === "darwin") {
+    const found = await findGodotInUserDirs();
+    if (found) return found;
+  }
+
   throw new Error(
-    "Could not find Godot executable. Set the GODOT_PATH environment variable or install Godot to a standard location."
+    "Could not find Godot executable. Set the GODOT_PATH environment variable or install Godot to a standard location.\n" +
+    "On macOS, the executable is at: YourGodot.app/Contents/MacOS/Godot\n" +
+    "Example: GODOT_PATH=/Users/yourname/Documents/Claude/Games/Godot.app/Contents/MacOS/Godot"
   );
 }
 
