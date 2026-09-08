@@ -38,13 +38,34 @@ picks up the rebuilt server.
 
 Ask me: **"run godot_get_version"**
 
-✅ **Expect** `4.7.2.stable.official.ed1daf0bf`
+✅ **Expect `4.5.1`** in any of your existing projects — and that is correct.
+Every one of your `.mcp.json` files already pins:
 
-> It was silently using **4.5.1** before this work. If you'd rather pin 4.5,
-> set `GODOT_PATH` in your `.mcp.json` and tell me — don't just accept 4.7 if
-> your projects target 4.5. **All your projects declare `config/features =
-> "4.5"`,** so opening them in 4.7 will prompt to upgrade. See the warning in
-> Step 2.1.
+```
+"GODOT_PATH": "/Users/medrive/Documents/Claude/Games/Godot.app/Contents/MacOS/Godot"
+```
+
+`GODOT_PATH` wins over auto-detection, so the "prefers newest" change does
+**not** alter behaviour in your existing projects. It only applies where no
+`GODOT_PATH` is pinned — such as `new-godot-mcp-tester-project`, where you'd
+get `4.7.2`.
+
+> ⚠️ Keep it pinned to 4.5.1 for now. All your projects declare
+> `config/features "4.5"`, and `godot_launch_editor` opens the project with
+> whichever binary is configured. I verified that opening a 4.5 project in the
+> **4.7 GUI editor rewrites `project.godot` on contact** — `config/features`
+> becomes 4.7 and an `[animation]` compatibility block is added. Headless runs
+> and imports do *not* do this; only the editor does.
+
+### Step 1.4 — Fix the two projects pointing at a server that isn't there
+
+`Corner-Grocer` and `Dice` reference
+`~/.claude/mcp-servers/godot-claude-mcp/`, which does not exist — only
+`godot-mcp` does. Their Godot MCP server has been silently dead.
+
+```bash
+sed -i '' 's#mcp-servers/godot-claude-mcp/build#mcp-servers/godot-mcp/build#' ~/Documents/Claude/Games/Corner-Grocer/.mcp.json ~/Documents/Claude/Games/Dice/.mcp.json
+```
 
 ---
 
