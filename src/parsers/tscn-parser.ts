@@ -573,7 +573,10 @@ export class TscnParser {
   createScene(rootNodeType: string, rootNodeName?: string): TscnScene {
     const name = rootNodeName ?? rootNodeType;
     return {
-      header: { loadSteps: 1, format: 3 },
+      // No load_steps: Godot omits it when there is nothing to preload, on
+      // every version. It is added back by addExtResource() only if a scene
+      // that already declared one gains a resource.
+      header: { format: 3 },
       extResources: [],
       subResources: [],
       nodes: [

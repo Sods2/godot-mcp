@@ -489,3 +489,16 @@ describe("TscnParser load_steps handling", () => {
     expect(parser.serialize(updated)).not.toContain("load_steps");
   });
 });
+
+describe("TscnParser createScene", () => {
+  const parser = new TscnParser();
+
+  it("writes no load_steps for a scene with no resources", () => {
+    // Godot omits load_steps when there is nothing to preload, on every
+    // version — writing load_steps=1 made every new scene differ from what
+    // the editor would have written.
+    const out = parser.serialize(parser.createScene("Node2D", "Main"));
+    expect(out).not.toContain("load_steps");
+    expect(out).toMatch(/^\[gd_scene format=3\]/);
+  });
+});
