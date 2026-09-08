@@ -117,7 +117,11 @@ async function findGodotInUserDirs(): Promise<string | null> {
     try {
       const { stdout } = await execFileAsync(
         "find",
-        [dir, "-maxdepth", "4", "-name", "Godot*.app", "-type", "d"],
+        // Depth 6 rather than 4: a bundle kept in a subfolder such as
+        // ~/Documents/<work>/<games>/<Godot IDE>/Godot_v4.7.app already sits
+        // exactly at the old limit, so one more level of nesting made
+        // auto-detect fail silently. The deeper walk costs tens of ms.
+        [dir, "-maxdepth", "6", "-name", "Godot*.app", "-type", "d"],
         { timeout: 8000 }
       );
       const appPaths = stdout
