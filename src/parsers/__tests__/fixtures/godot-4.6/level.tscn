@@ -1,0 +1,25 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_vonw3"]
+[ext_resource type="PackedScene" path="res://enemy.tscn" id="2_oi3di"]
+
+[node name="Level" type="Node2D" unique_id=1527632021]
+
+[node name="Player" type="CharacterBody2D" parent="." unique_id=329030461 groups=["damageable", "player"]]
+position = Vector2(100, 200)
+script = ExtResource("1_vonw3")
+
+[node name="Camera" type="Camera2D" parent="Player" unique_id=656252795]
+
+[node name="Enemy1" parent="." unique_id=2088917896 instance=ExtResource("2_oi3di")]
+position = Vector2(500, 200)
+
+[node name="Sprite" type="Sprite2D" parent="Enemy1" unique_id=1067599605]
+position = Vector2(7, 7)
+
+[node name="Enemy2" parent="." unique_id=960034563 instance=ExtResource("2_oi3di")]
+
+[connection signal="hit" from="Player" to="Player" method="_on_hit"]
+[connection signal="visibility_changed" from="Player/Camera" to="Player" method="_on_vis" flags=3 binds= [42]]
+
+[editable path="Enemy1"]

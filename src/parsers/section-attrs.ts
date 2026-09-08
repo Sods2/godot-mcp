@@ -113,3 +113,41 @@ export function serializeExtraAttrs(
     .map(([key, value]) => ` ${key}=${value}`)
     .join("");
 }
+
+/**
+ * Build a section header's attribute list.
+ *
+ * `order` is the attribute order the file was written with; emitting in that
+ * order keeps an untouched section byte-identical, without this parser having
+ * to hardcode a per-version guess at Godot's own ordering (4.6 writes
+ * `unique_id` before `instance`, for instance). Attributes with no recorded
+ * position — a node this parser created — follow in `known` order.
+ */
+export function serializeAttrs(
+  known: Array<[string, string | undefined]>,
+  extra: Record<string, string> | undefined,
+  order: string[] | undefined
+): string {
+  const values = new Map<string, string>();
+  for (const [key, value] of known) {
+    if (value !== undefined) values.set(key, value);
+  }
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) values.set(key, value);
+  }
+
+  const parts: string[] = [];
+  const emitted = new Set<string>();
+  for (const key of order ?? []) {
+    const value = values.get(key);
+    if (value !== undefined && !emitted.has(key)) {
+      parts.push(`${key}=${value}`);
+      emitted.add(key);
+    }
+  }
+  for (const [key, value] of values) {
+    if (!emitted.has(key)) parts.push(`${key}=${value}`);
+  }
+
+  return parts.map((part) => ` ${part}`).join("");
+}

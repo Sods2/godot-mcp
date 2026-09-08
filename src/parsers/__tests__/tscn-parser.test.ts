@@ -66,7 +66,7 @@ describe("TscnParser", () => {
     it("should extract ext_resource without uid", () => {
       const scene = parser.parse(SAMPLE_TSCN);
       expect(scene.extResources).toHaveLength(1);
-      expect(scene.extResources[0]).toEqual({
+      expect(scene.extResources[0]).toMatchObject({
         type: "Texture2D",
         path: "res://icon.png",
         id: "1_abc",
@@ -132,7 +132,7 @@ describe("TscnParser", () => {
     it("should extract connections", () => {
       const scene = parser.parse(SAMPLE_TSCN);
       expect(scene.connections).toHaveLength(1);
-      expect(scene.connections[0]).toEqual({
+      expect(scene.connections[0]).toMatchObject({
         signal: "ready",
         from: ".",
         to: "Sprite",

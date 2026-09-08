@@ -36,10 +36,8 @@ const PLATFORM_PATHS: Record<string, string[]> = {
       os.homedir(),
       "Library/Application Support/Steam/steamapps/common/Godot Engine/Godot.app/Contents/MacOS/Godot"
     ),
-    // Non-standard user locations (e.g. ~/Documents/Claude/Games/Godot.app)
-    path.join(os.homedir(), "Documents/Claude/Games/Godot.app/Contents/MacOS/Godot"),
-    path.join(os.homedir(), "Downloads/Godot.app/Contents/MacOS/Godot"),
-    path.join(os.homedir(), "Desktop/Godot.app/Contents/MacOS/Godot"),
+    // Godot bundles under ~/Documents, ~/Downloads and ~/Desktop are found by
+    // findGodotInUserDirs(), which prefers the newest version it finds.
   ],
   win32: [
     "C:\\Program Files\\Godot\\Godot.exe",
@@ -66,7 +64,7 @@ function bundleVersion(name: string): number[] {
   return [1, 2, 3].map((i) => parseInt(match[i] ?? "0", 10));
 }
 
-function compareVersionsDesc(a: string, b: string): number {
+export function compareVersionsDesc(a: string, b: string): number {
   const [av, bv] = [bundleVersion(a), bundleVersion(b)];
   for (let i = 0; i < 3; i++) {
     if (av[i] !== bv[i]) return bv[i] - av[i];
@@ -122,7 +120,11 @@ async function findGodotInUserDirs(): Promise<string | null> {
         [dir, "-maxdepth", "4", "-name", "Godot*.app", "-type", "d"],
         { timeout: 8000 }
       );
-      const appPaths = stdout.trim().split("\n").filter(Boolean);
+      const appPaths = stdout
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .sort((a, b) => compareVersionsDesc(path.basename(a), path.basename(b)));
       for (const appPath of appPaths) {
         const exe = path.join(appPath, "Contents/MacOS/Godot");
         if ((await isExecutable(exe)) && (await validateGodot(exe))) {

@@ -315,9 +315,12 @@ func _handle_message(msg: Dictionary) -> void:
 		_send(_client, _protocol.encode_response(id, result))
 
 func _handle_editor_status() -> Dictionary:
+	# Godot 4.7 reports a single empty path when no scene is open; skip those
+	# so callers can treat an empty list as "nothing open".
 	var open_scenes: Array[String] = []
-	for i in range(EditorInterface.get_open_scenes().size()):
-		open_scenes.append(EditorInterface.get_open_scenes()[i])
+	for scene_path in EditorInterface.get_open_scenes():
+		if scene_path != "":
+			open_scenes.append(scene_path)
 	return {
 		"connected": true,
 		"open_scenes": open_scenes,
