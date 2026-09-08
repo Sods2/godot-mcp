@@ -14,6 +14,15 @@ function resolveResPath(projectPath: string, resPath: string): string {
   return path.join(project, relative);
 }
 
+/**
+ * Godot 4.7 reports `[""]` from `get_open_scenes()` when no scene is open,
+ * where 4.6 and earlier report `[]`. An empty path would resolve to the
+ * project directory itself, so drop those before they reach the filesystem.
+ */
+function openScenePaths(openScenes: string[] | undefined): string[] {
+  return (openScenes ?? []).filter((scenePath) => scenePath.length > 0);
+}
+
 async function persistConnection(
   bridge: BridgeConnection,
   signal: string,
@@ -25,7 +34,7 @@ async function persistConnection(
 ): Promise<string> {
   // Get the currently open scene from editor
   const status = await bridge.send<{ open_scenes?: string[] }>("editor.status", {});
-  const openScenes = status.open_scenes ?? [];
+  const openScenes = openScenePaths(status.open_scenes);
   if (openScenes.length === 0) return "Runtime connection only — no open scene found for persistence";
 
   const scenePath = openScenes[0];
@@ -133,7 +142,7 @@ export function registerSignalTools(
         // Merge with TSCN file to catch connections filtered out by the runtime
         try {
           const status = await bridge.send<{ open_scenes?: string[] }>("editor.status", {});
-          const openScenes = status.open_scenes ?? [];
+          const openScenes = openScenePaths(status.open_scenes);
           if (openScenes.length > 0) {
             const filePath = resolveResPath(resolveProjectPath(), openScenes[0]);
             const content = await readFile(filePath, "utf-8");

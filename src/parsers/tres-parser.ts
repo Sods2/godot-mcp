@@ -1,23 +1,44 @@
-import type { SubResource } from "./tscn-parser.js";
+import {
+  serializeSubResource,
+  type ExtResource,
+  type SubResource,
+} from "./tscn-parser.js";
+import {
+  collectExtraAttrs,
+  parseAttrs,
+  serializeAttrs,
+} from "./section-attrs.js";
+
+const RESOURCE_HEADER_ATTRS: ReadonlySet<string> = new Set([
+  "type",
+  "load_steps",
+  "format",
+]);
+const EXT_RESOURCE_ATTRS: ReadonlySet<string> = new Set([
+  "type",
+  "path",
+  "id",
+  "uid",
+]);
+const SUB_RESOURCE_ATTRS: ReadonlySet<string> = new Set(["type", "id"]);
 
 export interface TresResource {
-  header: { type: string; loadSteps: number; format: number };
+  header: {
+    type: string;
+    /** Only set when the source file had it — Godot 4.6+ no longer writes it. */
+    loadSteps?: number;
+    format: number;
+    extraAttrs?: Record<string, string>;
+    /** Attribute order as written in the source file. */
+    attrOrder?: string[];
+  };
+  /**
+   * `[ext_resource]` sections. Dropping these orphans every `ExtResource("id")`
+   * reference in the body, so a re-serialized resource would fail to load.
+   */
+  extResources: ExtResource[];
   subResources: SubResource[];
   resource: Record<string, string>;
-}
-
-function parseHeaderAttrs(attrStr: string): Record<string, string> {
-  const attrs: Record<string, string> = {};
-  const re = /(\w+)=("(?:[^"\\]|\\.)*"|\S+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(attrStr)) !== null) {
-    let val = m[2];
-    if (val.startsWith('"') && val.endsWith('"')) {
-      val = val.slice(1, -1);
-    }
-    attrs[m[1]] = val;
-  }
-  return attrs;
 }
 
 function parseProperties(body: string): Record<string, string> {
@@ -72,7 +93,8 @@ function splitSections(
 export class TresParser {
   parse(content: string): TresResource {
     const resource: TresResource = {
-      header: { type: "", loadSteps: 1, format: 3 },
+      header: { type: "", format: 3 },
+      extResources: [],
       subResources: [],
       resource: {},
     };
@@ -84,22 +106,46 @@ export class TresParser {
       if (!headerMatch) continue;
 
       const tag = headerMatch[1];
-      const attrs = parseHeaderAttrs(headerMatch[2]);
+      const { values: attrs, raw } = parseAttrs(headerMatch[2]);
+      const attrOrder = Object.keys(raw);
       const props = parseProperties(section.body);
 
       switch (tag) {
         case "gd_resource": {
           resource.header.type = attrs.type || "";
-          resource.header.loadSteps = parseInt(attrs.load_steps || "1", 10);
+          // Godot 4.6+ omits load_steps; only round-trip it if it was there.
+          if (attrs.load_steps !== undefined) {
+            resource.header.loadSteps = parseInt(attrs.load_steps, 10);
+          }
           resource.header.format = parseInt(attrs.format || "3", 10);
+          const headerExtra = collectExtraAttrs(raw, RESOURCE_HEADER_ATTRS);
+          if (headerExtra) resource.header.extraAttrs = headerExtra;
+          resource.header.attrOrder = attrOrder;
+          break;
+        }
+        case "ext_resource": {
+          const ext: ExtResource = {
+            type: attrs.type || "",
+            path: attrs.path || "",
+            id: attrs.id || "",
+          };
+          if (attrs.uid) ext.uid = attrs.uid;
+          const extExtra = collectExtraAttrs(raw, EXT_RESOURCE_ATTRS);
+          if (extExtra) ext.extraAttrs = extExtra;
+          ext.attrOrder = attrOrder;
+          resource.extResources.push(ext);
           break;
         }
         case "sub_resource": {
-          resource.subResources.push({
+          const sub: SubResource = {
             type: attrs.type || "",
             id: attrs.id || "",
             properties: props,
-          });
+          };
+          const subExtra = collectExtraAttrs(raw, SUB_RESOURCE_ATTRS);
+          if (subExtra) sub.extraAttrs = subExtra;
+          sub.attrOrder = attrOrder;
+          resource.subResources.push(sub);
           break;
         }
         case "resource": {
@@ -114,15 +160,51 @@ export class TresParser {
 
   serialize(resource: TresResource): string {
     const lines: string[] = [];
-    const loadSteps = resource.subResources.length + 1;
 
     lines.push(
-      `[gd_resource type="${resource.header.type}" load_steps=${loadSteps} format=${resource.header.format}]`
+      "[gd_resource" +
+        serializeAttrs(
+          [
+            ["type", `"${resource.header.type}"`],
+            // Godot 4.6+ omits load_steps; write back exactly what the source
+            // had rather than recomputing (see the .tscn serializer).
+            [
+              "load_steps",
+              resource.header.loadSteps !== undefined
+                ? `${resource.header.loadSteps}`
+                : undefined,
+            ],
+            ["format", `${resource.header.format}`],
+          ],
+          resource.header.extraAttrs,
+          resource.header.attrOrder
+        ) +
+        "]"
     );
+
+    if (resource.extResources.length > 0) {
+      lines.push("");
+      for (const ext of resource.extResources) {
+        lines.push(
+          "[ext_resource" +
+            serializeAttrs(
+              [
+                ["type", `"${ext.type}"`],
+                ["path", `"${ext.path}"`],
+                ["id", `"${ext.id}"`],
+                ["uid", ext.uid ? `"${ext.uid}"` : undefined],
+              ],
+              ext.extraAttrs,
+              ext.attrOrder
+            ) +
+            "]"
+        );
+      }
+    }
 
     for (const sub of resource.subResources) {
       lines.push("");
-      lines.push(`[sub_resource type="${sub.type}" id="${sub.id}"]`);
+      lines.push(serializeSubResource(sub));
       for (const [key, val] of Object.entries(sub.properties)) {
         lines.push(`${key} = ${val}`);
       }

@@ -70,6 +70,38 @@ describe("signal-tools", () => {
       expect((mockBridge._getCalls()[0].params as Record<string, unknown>).flags).toBe(1);
     });
 
+
+    // Godot 4.7's get_open_scenes() reports [""] when nothing is open, where
+    // 4.6 and earlier report []. An empty path resolves to the project
+    // directory, so readFile would fail with EISDIR instead of reporting that
+    // there is no scene to persist to.
+    it("treats Godot 4.7's empty open_scenes entry as no open scene", async () => {
+      mockBridge._setResponse("signal.connect", { success: true });
+      mockBridge._setResponse("editor.status", { open_scenes: [""] });
+      const result = await mockServer.callTool("godot_connect_signal", {
+        from_path: "Button",
+        signal_name: "pressed",
+        to_path: "Player",
+        method: "_on_button_pressed",
+      });
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain("Runtime connection only");
+      expect(result.content[0].text).not.toContain("EISDIR");
+    });
+
+    it("treats an empty open_scenes list as no open scene", async () => {
+      mockBridge._setResponse("signal.connect", { success: true });
+      mockBridge._setResponse("editor.status", { open_scenes: [] });
+      const result = await mockServer.callTool("godot_connect_signal", {
+        from_path: "Button",
+        signal_name: "pressed",
+        to_path: "Player",
+        method: "_on_button_pressed",
+      });
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain("Runtime connection only");
+    });
+
     it("returns error when bridge throws", async () => {
       mockBridge._setError("signal.connect", new Error("Already connected"));
       const result = await mockServer.callTool("godot_connect_signal", {

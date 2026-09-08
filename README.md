@@ -39,7 +39,7 @@ Many tools work in a hybrid mode: they use the live editor bridge when available
 ## Prerequisites
 
 - **Node.js** 18 or later
-- **Godot** 4.3 or later
+- **Godot** 4.3 through 4.7 — verified against 4.6.3 and 4.7.2. Scene files round-trip byte-identically: node identity (`unique_id`), groups, instance links, editable instances and signal binds are all preserved
 - **Claude Code** or another MCP-compatible client
 
 ## Installation

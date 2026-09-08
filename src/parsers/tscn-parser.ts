@@ -1,7 +1,45 @@
+import {
+  collectExtraAttrs,
+  parseAttrs,
+  serializeAttrs,
+} from "./section-attrs.js";
+
+const SCENE_HEADER_ATTRS: ReadonlySet<string> = new Set([
+  "load_steps",
+  "format",
+  "uid",
+]);
+const EXT_RESOURCE_ATTRS: ReadonlySet<string> = new Set([
+  "type",
+  "path",
+  "id",
+  "uid",
+]);
+const SUB_RESOURCE_ATTRS: ReadonlySet<string> = new Set(["type", "id"]);
+const NODE_ATTRS: ReadonlySet<string> = new Set([
+  "name",
+  "type",
+  "parent",
+  "instance",
+]);
+const CONNECTION_ATTRS: ReadonlySet<string> = new Set([
+  "signal",
+  "from",
+  "to",
+  "method",
+  "flags",
+  "binds",
+  "unbinds",
+]);
+
 export interface TscnHeader {
-  loadSteps: number;
+  /** Only set when the source file had it — Godot 4.6+ no longer writes it. */
+  loadSteps?: number;
   format: number;
   uid?: string;
+  extraAttrs?: Record<string, string>;
+  /** Attribute order as written in the source file. */
+  attrOrder?: string[];
 }
 
 export interface ExtResource {
@@ -9,12 +47,18 @@ export interface ExtResource {
   path: string;
   id: string;
   uid?: string;
+  extraAttrs?: Record<string, string>;
+  /** Attribute order as written in the source file. */
+  attrOrder?: string[];
 }
 
 export interface SubResource {
   type: string;
   id: string;
   properties: Record<string, string>;
+  extraAttrs?: Record<string, string>;
+  /** Attribute order as written in the source file. */
+  attrOrder?: string[];
 }
 
 export interface SceneNode {
@@ -23,6 +67,14 @@ export interface SceneNode {
   parent?: string;
   instance?: string;
   properties: Record<string, string>;
+  /**
+   * Attributes with no dedicated field, preserved verbatim: `unique_id`,
+   * `parent_id_path`, `owner_uid_path` (Godot 4.6+), plus `groups`, `index`,
+   * `owner`, `node_paths` and `instance_placeholder`.
+   */
+  extraAttrs?: Record<string, string>;
+  /** Attribute order as written in the source file. */
+  attrOrder?: string[];
 }
 
 export interface Connection {
@@ -33,6 +85,10 @@ export interface Connection {
   flags?: number;
   binds?: string;
   unbinds?: number;
+  /** Preserved verbatim: `from_uid_path` / `to_uid_path` (Godot 4.6+). */
+  extraAttrs?: Record<string, string>;
+  /** Attribute order as written in the source file. */
+  attrOrder?: string[];
 }
 
 export interface TscnScene {
@@ -41,6 +97,23 @@ export interface TscnScene {
   subResources: SubResource[];
   nodes: SceneNode[];
   connections: Connection[];
+  /** Node paths from `[editable path="..."]` sections. */
+  editables: string[];
+}
+
+export function serializeSubResource(sub: SubResource): string {
+  return (
+    "[sub_resource" +
+    serializeAttrs(
+      [
+        ["type", `"${sub.type}"`],
+        ["id", `"${sub.id}"`],
+      ],
+      sub.extraAttrs,
+      sub.attrOrder
+    ) +
+    "]"
+  );
 }
 
 function randomHex(len: number): string {
@@ -52,52 +125,55 @@ function randomHex(len: number): string {
   return result;
 }
 
-function parseHeaderAttrs(attrStr: string): Record<string, string> {
-  const attrs: Record<string, string> = {};
-  const re = /(\w+)=("(?:[^"\\]|\\.)*"|\S+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(attrStr)) !== null) {
-    let val = m[2];
-    if (val.startsWith('"') && val.endsWith('"')) {
-      val = val.slice(1, -1);
-    }
-    attrs[m[1]] = val;
-  }
-  return attrs;
-}
-
-function countBraceDepth(s: string): number {
+/**
+ * Scan one line of a property value, continuing from the previous line's
+ * string state. A value can span lines two ways: an open bracket (dict or
+ * array) or an open quote — Godot writes multi-line strings literally, e.g.
+ *
+ *     text = "0/10
+ *     Wood"
+ *
+ * Tracking only bracket depth silently swallows the second line, because it
+ * has no `=` and is skipped as junk.
+ */
+function scanValueLine(
+  s: string,
+  startInString: boolean
+): { depth: number; inString: boolean } {
   let depth = 0;
-  let inStr = false;
+  let inString = startInString;
   let escaped = false;
   for (const ch of s) {
     if (escaped) { escaped = false; continue; }
     if (ch === "\\") { escaped = true; continue; }
-    if (ch === '"') { inStr = !inStr; continue; }
-    if (inStr) continue;
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
     if (ch === "{" || ch === "[") depth++;
     else if (ch === "}" || ch === "]") depth--;
   }
-  return depth;
+  return { depth, inString };
 }
 
-function parseProperties(body: string): Record<string, string> {
+export function parseProperties(body: string): Record<string, string> {
   const props: Record<string, string> = {};
   if (!body) return props;
 
   let currentKey: string | null = null;
   let currentValue = "";
   let depth = 0;
+  let inString = false;
 
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
 
     if (currentKey !== null) {
-      // Accumulating a multi-line value (dict or array)
+      // Accumulating a value that spans lines (dict, array, or string)
       currentValue += "\n" + line;
-      depth += countBraceDepth(trimmed);
-      if (depth <= 0) {
-        props[currentKey] = currentValue.trim();
+      const scan = scanValueLine(line, inString);
+      depth += scan.depth;
+      inString = scan.inString;
+      if (depth <= 0 && !inString) {
+        props[currentKey] = currentValue;
         currentKey = null;
         currentValue = "";
         depth = 0;
@@ -111,20 +187,21 @@ function parseProperties(body: string): Record<string, string> {
     const key = trimmed.slice(0, eqIndex).trim();
     const value = trimmed.slice(eqIndex + 1).trim();
 
-    const d = countBraceDepth(value);
-    if (d > 0) {
-      // Value opens a multi-line block
+    const scan = scanValueLine(value, false);
+    if (scan.depth > 0 || scan.inString) {
+      // Value continues on the following lines
       currentKey = key;
       currentValue = value;
-      depth = d;
+      depth = scan.depth;
+      inString = scan.inString;
     } else {
       props[key] = value;
     }
   }
 
-  // Handle unclosed block (malformed .tscn)
+  // Handle an unterminated value (malformed .tscn)
   if (currentKey !== null) {
-    props[currentKey] = currentValue.trim();
+    props[currentKey] = currentValue;
   }
 
   return props;
@@ -166,11 +243,12 @@ function splitSections(
 export class TscnParser {
   parse(content: string): TscnScene {
     const scene: TscnScene = {
-      header: { loadSteps: 1, format: 3 },
+      header: { format: 3 },
       extResources: [],
       subResources: [],
       nodes: [],
       connections: [],
+      editables: [],
     };
 
     const sections = splitSections(content);
@@ -181,14 +259,21 @@ export class TscnParser {
 
       const tag = headerMatch[1];
       const attrStr = headerMatch[2];
-      const attrs = parseHeaderAttrs(attrStr);
+      const { values: attrs, raw } = parseAttrs(attrStr);
+      const attrOrder = Object.keys(raw);
       const props = parseProperties(section.body);
 
       switch (tag) {
         case "gd_scene": {
           scene.header.format = parseInt(attrs.format || "3", 10);
-          scene.header.loadSteps = parseInt(attrs.load_steps || "1", 10);
+          // Godot 4.6+ omits load_steps; only round-trip it if it was there.
+          if (attrs.load_steps !== undefined) {
+            scene.header.loadSteps = parseInt(attrs.load_steps, 10);
+          }
           if (attrs.uid) scene.header.uid = attrs.uid;
+          const headerExtra = collectExtraAttrs(raw, SCENE_HEADER_ATTRS);
+          if (headerExtra) scene.header.extraAttrs = headerExtra;
+          scene.header.attrOrder = attrOrder;
           break;
         }
         case "ext_resource": {
@@ -198,15 +283,22 @@ export class TscnParser {
             id: attrs.id || "",
           };
           if (attrs.uid) ext.uid = attrs.uid;
+          const extra = collectExtraAttrs(raw, EXT_RESOURCE_ATTRS);
+          if (extra) ext.extraAttrs = extra;
+          ext.attrOrder = attrOrder;
           scene.extResources.push(ext);
           break;
         }
         case "sub_resource": {
-          scene.subResources.push({
+          const sub: SubResource = {
             type: attrs.type || "",
             id: attrs.id || "",
             properties: props,
-          });
+          };
+          const subExtra = collectExtraAttrs(raw, SUB_RESOURCE_ATTRS);
+          if (subExtra) sub.extraAttrs = subExtra;
+          sub.attrOrder = attrOrder;
+          scene.subResources.push(sub);
           break;
         }
         case "node": {
@@ -217,6 +309,9 @@ export class TscnParser {
           if (attrs.type) node.type = attrs.type;
           if (attrs.parent !== undefined) node.parent = attrs.parent;
           if (attrs.instance !== undefined) node.instance = attrs.instance;
+          const extra = collectExtraAttrs(raw, NODE_ATTRS);
+          if (extra) node.extraAttrs = extra;
+          node.attrOrder = attrOrder;
           scene.nodes.push(node);
           break;
         }
@@ -230,7 +325,14 @@ export class TscnParser {
           if (attrs.flags) conn.flags = parseInt(attrs.flags, 10);
           if (attrs.binds) conn.binds = attrs.binds;
           if (attrs.unbinds) conn.unbinds = parseInt(attrs.unbinds, 10);
+          const extra = collectExtraAttrs(raw, CONNECTION_ATTRS);
+          if (extra) conn.extraAttrs = extra;
+          conn.attrOrder = attrOrder;
           scene.connections.push(conn);
+          break;
+        }
+        case "editable": {
+          if (attrs.path !== undefined) scene.editables.push(attrs.path);
           break;
         }
       }
@@ -241,53 +343,116 @@ export class TscnParser {
 
   serialize(scene: TscnScene): string {
     const lines: string[] = [];
-    const loadSteps =
-      scene.extResources.length + scene.subResources.length + 1;
 
-    let header = `[gd_scene load_steps=${loadSteps} format=${scene.header.format}`;
-    if (scene.header.uid) header += ` uid="${scene.header.uid}"`;
-    header += "]";
-    lines.push(header);
+    // Blank-line placement below matches Godot's own writer: ext_resource,
+    // connection and editable sections are each written as one contiguous
+    // block, while sub_resource and node sections are separated individually.
+    lines.push(
+      "[gd_scene" +
+        serializeAttrs(
+          [
+            // Godot 4.6+ omits load_steps; write back exactly what the source
+            // had. It is only a preload hint, and hand-authored scenes can
+            // carry a value that disagrees with the section count — recomputing
+            // would rewrite a line nobody asked us to touch. addExtResource()
+            // keeps it in step when resources are actually added.
+            [
+              "load_steps",
+              scene.header.loadSteps !== undefined
+                ? `${scene.header.loadSteps}`
+                : undefined,
+            ],
+            ["format", `${scene.header.format}`],
+            ["uid", scene.header.uid ? `"${scene.header.uid}"` : undefined],
+          ],
+          scene.header.extraAttrs,
+          scene.header.attrOrder
+        ) +
+        "]"
+    );
 
-    for (const ext of scene.extResources) {
+    if (scene.extResources.length > 0) {
       lines.push("");
-      let line = `[ext_resource type="${ext.type}" path="${ext.path}" id="${ext.id}"`;
-      if (ext.uid) line += ` uid="${ext.uid}"`;
-      line += "]";
-      lines.push(line);
+      for (const ext of scene.extResources) {
+        lines.push(
+          "[ext_resource" +
+            serializeAttrs(
+              [
+                ["type", `"${ext.type}"`],
+                ["path", `"${ext.path}"`],
+                ["id", `"${ext.id}"`],
+                ["uid", ext.uid ? `"${ext.uid}"` : undefined],
+              ],
+              ext.extraAttrs,
+              ext.attrOrder
+            ) +
+            "]"
+        );
+      }
     }
 
     for (const sub of scene.subResources) {
       lines.push("");
-      lines.push(`[sub_resource type="${sub.type}" id="${sub.id}"]`);
+      lines.push(serializeSubResource(sub));
       for (const [key, val] of Object.entries(sub.properties)) {
         lines.push(`${key} = ${val}`);
       }
     }
 
-    const sorted = this.sortNodes(scene.nodes);
-
-    for (const node of sorted) {
+    for (const node of this.sortNodes(scene.nodes)) {
       lines.push("");
-      let nodeLine = `[node name="${node.name}"`;
-      if (node.type) nodeLine += ` type="${node.type}"`;
-      if (node.parent !== undefined) nodeLine += ` parent="${node.parent}"`;
-      if (node.instance) nodeLine += ` instance=${node.instance}`;
-      nodeLine += "]";
-      lines.push(nodeLine);
+      lines.push(
+        "[node" +
+          serializeAttrs(
+            [
+              ["name", `"${node.name}"`],
+              ["type", node.type ? `"${node.type}"` : undefined],
+              ["parent", node.parent !== undefined ? `"${node.parent}"` : undefined],
+              ["instance", node.instance],
+            ],
+            node.extraAttrs,
+            node.attrOrder
+          ) +
+          "]"
+      );
       for (const [key, val] of Object.entries(node.properties)) {
         lines.push(`${key} = ${val}`);
       }
     }
 
-    for (const conn of scene.connections) {
+    if (scene.connections.length > 0) {
       lines.push("");
-      let connLine = `[connection signal="${conn.signal}" from="${conn.from}" to="${conn.to}" method="${conn.method}"`;
-      if (conn.flags !== undefined) connLine += ` flags=${conn.flags}`;
-      if (conn.binds !== undefined) connLine += ` binds=${conn.binds}`;
-      if (conn.unbinds !== undefined) connLine += ` unbinds=${conn.unbinds}`;
-      connLine += "]";
-      lines.push(connLine);
+      for (const conn of scene.connections) {
+        lines.push(
+          "[connection" +
+            serializeAttrs(
+              [
+                ["signal", `"${conn.signal}"`],
+                ["from", `"${conn.from}"`],
+                ["to", `"${conn.to}"`],
+                ["method", `"${conn.method}"`],
+                ["flags", conn.flags !== undefined ? `${conn.flags}` : undefined],
+                // Godot writes a space after `binds=`; keep it so untouched
+                // scenes round-trip byte-identically.
+                ["binds", conn.binds !== undefined ? ` ${conn.binds}` : undefined],
+                [
+                  "unbinds",
+                  conn.unbinds !== undefined ? `${conn.unbinds}` : undefined,
+                ],
+              ],
+              conn.extraAttrs,
+              conn.attrOrder
+            ) +
+            "]"
+        );
+      }
+    }
+
+    if (scene.editables.length > 0) {
+      lines.push("");
+      for (const editablePath of scene.editables) {
+        lines.push(`[editable path="${editablePath}"]`);
+      }
     }
 
     lines.push("");
@@ -396,6 +561,10 @@ export class TscnParser {
     const id = `${scene.extResources.length + 1}_${randomHex(3)}`;
     const newScene: TscnScene = {
       ...scene,
+      header:
+        scene.header.loadSteps !== undefined
+          ? { ...scene.header, loadSteps: scene.header.loadSteps + 1 }
+          : scene.header,
       extResources: [...scene.extResources, { type, path, id }],
     };
     return { scene: newScene, id };
@@ -404,7 +573,10 @@ export class TscnParser {
   createScene(rootNodeType: string, rootNodeName?: string): TscnScene {
     const name = rootNodeName ?? rootNodeType;
     return {
-      header: { loadSteps: 1, format: 3 },
+      // No load_steps: Godot omits it when there is nothing to preload, on
+      // every version. It is added back by addExtResource() only if a scene
+      // that already declared one gains a resource.
+      header: { format: 3 },
       extResources: [],
       subResources: [],
       nodes: [
@@ -415,6 +587,7 @@ export class TscnParser {
         },
       ],
       connections: [],
+      editables: [],
     };
   }
 
@@ -495,31 +668,33 @@ export class TscnParser {
     if (!root) return nodes;
 
     const sorted: SceneNode[] = [root];
-    const remaining = nodes.filter((n) => n !== root);
+    let remaining = nodes.filter((n) => n !== root);
     const added = new Set<string>();
     added.add(root.name);
 
+    // Walk forward and keep the leftovers in source order, so siblings stay
+    // where the author put them instead of flipping on every serialize.
     let changed = true;
     while (changed && remaining.length > 0) {
       changed = false;
-      for (let i = remaining.length - 1; i >= 0; i--) {
-        const node = remaining[i];
-        const fullPath = this.buildNodePath(node, nodes);
+      const deferred: SceneNode[] = [];
 
-        let parentAdded = false;
-        if (node.parent === ".") {
-          parentAdded = added.has(root.name);
-        } else {
-          parentAdded = added.has(`${root.name}/${node.parent}`);
-        }
+      for (const node of remaining) {
+        const parentAdded =
+          node.parent === "."
+            ? added.has(root.name)
+            : added.has(`${root.name}/${node.parent}`);
 
         if (parentAdded) {
           sorted.push(node);
-          added.add(fullPath);
-          remaining.splice(i, 1);
+          added.add(this.buildNodePath(node, nodes));
           changed = true;
+        } else {
+          deferred.push(node);
         }
       }
+
+      remaining = deferred;
     }
 
     sorted.push(...remaining);

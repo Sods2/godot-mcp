@@ -34,6 +34,27 @@ describe("TresParser", () => {
     });
   });
 
+
+  describe("load_steps", () => {
+    it("should re-emit load_steps when the source had it", () => {
+      const out = parser.serialize(parser.parse(SAMPLE_TRES));
+      expect(out).toMatch(/^\[gd_resource type="Environment" load_steps=2 format=3\]/);
+    });
+
+    it("should not add load_steps to a resource that had none", () => {
+      const content = `[gd_resource type="Environment" format=4 uid="uid://abc"]
+
+[resource]
+background_mode = 2
+`;
+      const resource = parser.parse(content);
+      expect(resource.header.loadSteps).toBeUndefined();
+      const out = parser.serialize(resource);
+      expect(out).not.toContain("load_steps");
+      expect(out).toContain('uid="uid://abc"');
+    });
+  });
+
   describe("sub_resources", () => {
     it("should extract sub_resources with properties", () => {
       const resource = parser.parse(SAMPLE_TRES);
