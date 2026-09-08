@@ -143,22 +143,23 @@ were identical on 4.5.1, 4.6.3 and 4.7.2 — **10 passed, 1 failed** each:
 | `godot_run_scene` | ✅ | ✅ | ✅ |
 | **`godot_get_stack_trace` — frames with real line numbers** | ✅ | ✅ | ✅ |
 | **`godot_get_output` — the game's print() lines** | ✅ | ✅ | ✅ |
-| `godot_get_locals` | ❌ | ❌ | ❌ |
+| `godot_get_locals` | ✅ | ✅ | ✅ |
 
 **The highest-risk item passed.** Stack trace and output both go through
 `_find_node_of_class` and the ancestor window I widened, and both work on
 4.7's reorganised dock hierarchy.
 
-## The one real failure: `godot_get_locals` returns `[]`
+## `godot_get_locals` — found broken, now fixed
 
-**Pre-existing on all three versions, including the 4.5.1 baseline — not
-caused by this work.** The editor logs show `_capture()` never fires at all
-(no `[Claude Bridge] Capture active` line), so `_stack_frames` is never
-populated from the debugger session. Stack trace still works because it falls
-back to scraping the editor UI; locals has the same fallback, but it isn't
-finding the locals tree.
+It returned `[]` on every version including 4.5.1, so it had never worked.
+Two causes: the debugger session's `stack_frame_vars` reply never reaches the
+plugin (Godot routes core messages to the built-in debugger, not to plugin
+captures), and the UI fallback scanned for `Tree` nodes when Godot actually
+shows stack variables in an `EditorDebuggerInspector`.
 
-Tell me if you want this fixed — it's a separate bug from the 4.6/4.7 work.
+Now reads that inspector. Verified over MCP against a real GUI editor on all
+three versions — locals, members and values all return, each tagged with its
+scope.
 
 ## What's left for you: Step 3.1 — screenshots
 
@@ -206,7 +207,7 @@ Homebrew.)
 | **Real GUI editor over MCP — breakpoint, stack trace, output** | ✅ | ✅ | ✅ |
 | All 13 plugin GDScript files compile | ✅ | ✅ | ✅ |
 | `StreamPeerTCP.STATUS_*` + moved `TCPServer` methods resolve | ✅ | ✅ | ✅ |
-| `godot_get_locals` | ❌ | ❌ | ❌ |
+| `godot_get_locals` | ✅ | ✅ | ✅ |
 
 Version-independent (parser only, no engine involved):
 
@@ -214,8 +215,5 @@ Version-independent (parser only, no engine involved):
 |---|---|
 | All 205 real `.tscn`/`.tres` files in `~/Documents/Claude/Games` round-trip byte-identically | ✅ |
 | 271 unit tests, lint and build clean | ✅ |
-
-The single failure, `godot_get_locals`, is identical on all three including
-the 4.5.1 baseline — a pre-existing bug, not a regression from this work.
 
 **What none of this reaches:** screenshots, which need a real display.
