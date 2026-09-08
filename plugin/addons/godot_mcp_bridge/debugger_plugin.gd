@@ -420,6 +420,43 @@ func _read_stack_from_editor_ui() -> Array:
 			return frames
 	return frames
 
+# Read stack variables from the debugger's EditorDebuggerInspector.
+#
+# Its edited object (EditorDebuggerRemoteObject/-Objects) exposes the current
+# frame's variables as properties named "Locals/x", "Members/y" and
+# "Globals/z". The debugger session's own stack_frame_vars message never
+# reaches _capture() — Godot routes unprefixed core messages to the built-in
+# debugger, not to EditorDebuggerPlugin captures — so this is the only path
+# that works.
+func _read_locals_from_debugger_inspector(debugger: Node) -> Array:
+	for child in _get_all_children(debugger):
+		if not child.get_class().containsn("debuggerinspector"):
+			continue
+		if not child.has_method("get_edited_object"):
+			continue
+		var obj = child.get_edited_object()
+		if obj == null:
+			continue
+		var locals := []
+		for prop in obj.get_property_list():
+			var prop_name: String = str(prop.get("name", ""))
+			var slash := prop_name.find("/")
+			if slash <= 0:
+				continue  # "script" and other object bookkeeping
+			var scope := prop_name.substr(0, slash)
+			if not (scope == "Locals" or scope == "Members" or scope == "Globals"):
+				continue
+			locals.append({
+				"name": prop_name.substr(slash + 1),
+				"value": str(obj.get(prop_name)),
+				"scope": scope,
+			})
+		# Several inspectors exist (the expression evaluator has one too);
+		# use the first that actually holds frame variables.
+		if not locals.is_empty():
+			return locals
+	return []
+
 func _read_locals_from_editor_ui() -> Array:
 	var base := _get_editor_base()
 	if base == null:
@@ -427,7 +464,13 @@ func _read_locals_from_editor_ui() -> Array:
 	var debugger := _find_node_of_class(base, "ScriptEditorDebugger")
 	if debugger == null:
 		return []
-	# Scan all Trees in the debugger, skip stack trees and known non-locals trees
+	# Strategy 1: the debugger's own inspector. Godot shows stack variables in
+	# an EditorDebuggerInspector, not a Tree, so the Tree scan below never sees
+	# them. Verified on 4.5.1, 4.6.3 and 4.7.2.
+	var from_inspector := _read_locals_from_debugger_inspector(debugger)
+	if not from_inspector.is_empty():
+		return from_inspector
+	# Strategy 2: scan all Trees in the debugger, skip stack trees and known non-locals trees
 	var locals := []
 	for child in _get_all_children(debugger):
 		if not (child is Tree):

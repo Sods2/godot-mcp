@@ -243,7 +243,12 @@ export interface RemoveBreakpointResponse { success: true; }
 export interface ListBreakpointsResponse { breakpoints: Array<{ file: string; line: number }>; }
 export interface StackFrame { file: string; line: number; function: string; id: number; }
 export interface GetStackTraceResponse { frames: StackFrame[]; }
-export interface LocalVariable { name: string; value: unknown; }
+export interface LocalVariable {
+  name: string;
+  value: unknown;
+  /** "Locals", "Members" or "Globals" when read from the debugger inspector. */
+  scope?: string;
+}
 export interface GetLocalsResponse { locals: LocalVariable[]; }
 export interface DebugStepResponse { success: true; }
 export interface DebugContinueResponse { success: true; }
