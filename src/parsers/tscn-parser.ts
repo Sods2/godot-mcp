@@ -15,6 +15,7 @@ const EXT_RESOURCE_ATTRS: ReadonlySet<string> = new Set([
   "id",
   "uid",
 ]);
+const SUB_RESOURCE_ATTRS: ReadonlySet<string> = new Set(["type", "id"]);
 const NODE_ATTRS: ReadonlySet<string> = new Set([
   "name",
   "type",
@@ -55,6 +56,9 @@ export interface SubResource {
   type: string;
   id: string;
   properties: Record<string, string>;
+  extraAttrs?: Record<string, string>;
+  /** Attribute order as written in the source file. */
+  attrOrder?: string[];
 }
 
 export interface SceneNode {
@@ -95,6 +99,21 @@ export interface TscnScene {
   connections: Connection[];
   /** Node paths from `[editable path="..."]` sections. */
   editables: string[];
+}
+
+export function serializeSubResource(sub: SubResource): string {
+  return (
+    "[sub_resource" +
+    serializeAttrs(
+      [
+        ["type", `"${sub.type}"`],
+        ["id", `"${sub.id}"`],
+      ],
+      sub.extraAttrs,
+      sub.attrOrder
+    ) +
+    "]"
+  );
 }
 
 function randomHex(len: number): string {
@@ -253,11 +272,15 @@ export class TscnParser {
           break;
         }
         case "sub_resource": {
-          scene.subResources.push({
+          const sub: SubResource = {
             type: attrs.type || "",
             id: attrs.id || "",
             properties: props,
-          });
+          };
+          const subExtra = collectExtraAttrs(raw, SUB_RESOURCE_ATTRS);
+          if (subExtra) sub.extraAttrs = subExtra;
+          sub.attrOrder = attrOrder;
+          scene.subResources.push(sub);
           break;
         }
         case "node": {
@@ -348,7 +371,7 @@ export class TscnParser {
 
     for (const sub of scene.subResources) {
       lines.push("");
-      lines.push(`[sub_resource type="${sub.type}" id="${sub.id}"]`);
+      lines.push(serializeSubResource(sub));
       for (const [key, val] of Object.entries(sub.properties)) {
         lines.push(`${key} = ${val}`);
       }

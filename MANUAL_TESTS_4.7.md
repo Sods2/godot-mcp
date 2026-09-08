@@ -92,18 +92,24 @@ one. That shows as one added attribute on that node only.
 
 ## Already verified — no action needed
 
-Automated against **both 4.6.3 and 4.7.2**:
+Automated against **all three installs — 4.5.1, 4.6.3 and 4.7.2**:
 
 | Check | Result |
 |---|---|
-| All 8 engine-written fixtures round-trip byte-identically | ✅ |
-| Godot loads scenes after our edits; groups, instances, editable state, connections + binds all intact | ✅ |
+| All 18 engine-written fixtures round-trip byte-identically | ✅ |
+| Real MCP server driven over stdio by an MCP client, 50 tool assertions | ✅ |
+| MCP scene edits reload in the engine with groups, instances, editable state, connections and binds intact | ✅ |
+| MCP over the **live editor bridge** (`godot_open_scene`, `godot_get_scene_tree`, `godot_connect_signal`) | ✅ |
+| Signal persistence write path keeps every `unique_id`, `[editable]`, group and instance link | ✅ |
 | All 13 plugin GDScript files compile | ✅ |
 | Plugin `_enter_tree` runs, bridge binds port 6008, clean shutdown | ✅ |
-| Live JSON-RPC over the bridge (`editor.status`, `scene.get_tree`) | ✅ |
 | `StreamPeerTCP.STATUS_*` + moved `TCPServer`/`StreamPeerTCP` methods resolve | ✅ (audit item 3) |
 | `findGodotPath()` now resolves 4.7.2 instead of 4.5.1 | ✅ |
-| 238 unit tests | ✅ |
+| 258 unit tests | ✅ |
+
+Earlier versions are explicitly covered: 4.5.1 writes `load_steps` and no
+`unique_id`, and the parser reproduces that exactly rather than imposing 4.6+
+conventions on it.
 
 ### Note on which Godot the MCP server now uses
 
