@@ -1,23 +1,26 @@
 import type { SubResource } from "./tscn-parser.js";
+import {
+  collectExtraAttrs,
+  parseAttrs,
+  serializeExtraAttrs,
+} from "./section-attrs.js";
+
+const RESOURCE_HEADER_ATTRS: ReadonlySet<string> = new Set([
+  "type",
+  "load_steps",
+  "format",
+]);
 
 export interface TresResource {
-  header: { type: string; loadSteps: number; format: number };
+  header: {
+    type: string;
+    /** Only set when the source file had it — Godot 4.6+ no longer writes it. */
+    loadSteps?: number;
+    format: number;
+    extraAttrs?: Record<string, string>;
+  };
   subResources: SubResource[];
   resource: Record<string, string>;
-}
-
-function parseHeaderAttrs(attrStr: string): Record<string, string> {
-  const attrs: Record<string, string> = {};
-  const re = /(\w+)=("(?:[^"\\]|\\.)*"|\S+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(attrStr)) !== null) {
-    let val = m[2];
-    if (val.startsWith('"') && val.endsWith('"')) {
-      val = val.slice(1, -1);
-    }
-    attrs[m[1]] = val;
-  }
-  return attrs;
 }
 
 function parseProperties(body: string): Record<string, string> {
@@ -72,7 +75,7 @@ function splitSections(
 export class TresParser {
   parse(content: string): TresResource {
     const resource: TresResource = {
-      header: { type: "", loadSteps: 1, format: 3 },
+      header: { type: "", format: 3 },
       subResources: [],
       resource: {},
     };
@@ -84,14 +87,19 @@ export class TresParser {
       if (!headerMatch) continue;
 
       const tag = headerMatch[1];
-      const attrs = parseHeaderAttrs(headerMatch[2]);
+      const { values: attrs, raw } = parseAttrs(headerMatch[2]);
       const props = parseProperties(section.body);
 
       switch (tag) {
         case "gd_resource": {
           resource.header.type = attrs.type || "";
-          resource.header.loadSteps = parseInt(attrs.load_steps || "1", 10);
+          // Godot 4.6+ omits load_steps; only round-trip it if it was there.
+          if (attrs.load_steps !== undefined) {
+            resource.header.loadSteps = parseInt(attrs.load_steps, 10);
+          }
           resource.header.format = parseInt(attrs.format || "3", 10);
+          const headerExtra = collectExtraAttrs(raw, RESOURCE_HEADER_ATTRS);
+          if (headerExtra) resource.header.extraAttrs = headerExtra;
           break;
         }
         case "sub_resource": {
@@ -114,11 +122,15 @@ export class TresParser {
 
   serialize(resource: TresResource): string {
     const lines: string[] = [];
-    const loadSteps = resource.subResources.length + 1;
 
-    lines.push(
-      `[gd_resource type="${resource.header.type}" load_steps=${loadSteps} format=${resource.header.format}]`
-    );
+    let header = `[gd_resource type="${resource.header.type}"`;
+    if (resource.header.loadSteps !== undefined) {
+      header += ` load_steps=${resource.subResources.length + 1}`;
+    }
+    header += ` format=${resource.header.format}`;
+    header += serializeExtraAttrs(resource.header.extraAttrs);
+    header += "]";
+    lines.push(header);
 
     for (const sub of resource.subResources) {
       lines.push("");

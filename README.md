@@ -39,7 +39,7 @@ Many tools work in a hybrid mode: they use the live editor bridge when available
 ## Prerequisites
 
 - **Node.js** 18 or later
-- **Godot** 4.3 or later
+- **Godot** 4.3 through 4.7 — `.tscn` and `.tres` files written by 4.6+ round-trip with their node identity attributes (`unique_id`, `parent_id_path`, `owner_uid_path`) preserved
 - **Claude Code** or another MCP-compatible client
 
 ## Installation

@@ -473,9 +473,12 @@ func _find_node_of_class(root: Node, class_name_str: String, parent_class: Strin
 		if child.get_class() == class_name_str or child.is_class(class_name_str):
 			if parent_class == "":
 				return child
-			# Check ancestors up to 3 levels (handles intermediate containers like VBoxContainer)
+			# Check ancestors up to 6 levels. Godot reorganizes the editor's
+			# container hierarchy between releases (4.6 turned bottom panels into
+			# docks and added an "hb" level; 4.7 reshuffled again), so leave
+			# headroom above the 3 levels the deepest known layout needs.
 			var ancestor: Node = child.get_parent()
-			for _i in range(3):
+			for _i in range(6):
 				if ancestor == null:
 					break
 				if ancestor.get_class() == parent_class or ancestor.is_class(parent_class):

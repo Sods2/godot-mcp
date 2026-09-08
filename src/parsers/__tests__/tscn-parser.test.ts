@@ -16,6 +16,25 @@ position = Vector2(100, 200)
 [connection signal="ready" from="." to="Sprite" method="_on_ready"]
 `;
 
+
+// Godot 4.6+ writes no load_steps, and stamps node identity attributes that let
+// the editor track nodes across renames and reparents.
+const SAMPLE_TSCN_4_6 = `[gd_scene format=4 uid="uid://abc123"]
+
+[ext_resource type="PackedScene" path="res://enemy.tscn" id="1_abc" uid="uid://xyz"]
+
+[node name="Root" type="Node2D" unique_id=1 owner_uid_path=PackedInt32Array()]
+
+[node name="Sprite" type="Sprite2D" parent="." index="0" groups=["enemies", "physics"] unique_id=2 parent_id_path=PackedInt32Array(1) owner_uid_path=PackedInt32Array(1)]
+position = Vector2(100, 200)
+
+[node name="Enemy" parent="." instance=ExtResource("1_abc") unique_id=3 parent_id_path=PackedInt32Array(1)]
+
+[connection signal="ready" from="." to="Sprite" method="_on_ready" from_uid_path=PackedInt32Array(1) to_uid_path=PackedInt32Array(1, 2)]
+
+[editable path="Enemy"]
+`;
+
 describe("TscnParser", () => {
   const parser = new TscnParser();
 
@@ -119,6 +138,124 @@ describe("TscnParser", () => {
         to: "Sprite",
         method: "_on_ready",
       });
+    });
+  });
+
+
+  describe("Godot 4.6+ scenes", () => {
+    it("should preserve node identity attributes through a roundtrip", () => {
+      const scene = parser.parse(SAMPLE_TSCN_4_6);
+      const out = parser.serialize(scene);
+
+      expect(out).toContain(
+        '[node name="Root" type="Node2D" unique_id=1 owner_uid_path=PackedInt32Array()]'
+      );
+      expect(out).toContain("unique_id=2");
+      expect(out).toContain("parent_id_path=PackedInt32Array(1)");
+      expect(out).toContain("owner_uid_path=PackedInt32Array(1)");
+    });
+
+    it("should preserve connection uid paths through a roundtrip", () => {
+      const scene = parser.parse(SAMPLE_TSCN_4_6);
+      const out = parser.serialize(scene);
+      expect(out).toContain("from_uid_path=PackedInt32Array(1)");
+      expect(out).toContain("to_uid_path=PackedInt32Array(1, 2)");
+    });
+
+    it("should keep values that contain spaces intact", () => {
+      const scene = parser.parse(SAMPLE_TSCN_4_6);
+      const sprite = parser.getNodeByPath(scene, "Root/Sprite");
+      expect(sprite!.extraAttrs).toEqual({
+        index: '"0"',
+        groups: '["enemies", "physics"]',
+        unique_id: "2",
+        parent_id_path: "PackedInt32Array(1)",
+        owner_uid_path: "PackedInt32Array(1)",
+      });
+    });
+
+    it("should keep instance= alongside preserved attributes", () => {
+      const scene = parser.parse(SAMPLE_TSCN_4_6);
+      const enemy = parser.getNodeByPath(scene, "Root/Enemy");
+      expect(enemy!.instance).toBe('ExtResource("1_abc")');
+      expect(enemy!.extraAttrs?.unique_id).toBe("3");
+      expect(parser.serialize(scene)).toContain(
+        '[node name="Enemy" parent="." instance=ExtResource("1_abc") unique_id=3 parent_id_path=PackedInt32Array(1)]'
+      );
+    });
+
+    it("should survive an edit without losing identity attributes", () => {
+      const scene = parser.parse(SAMPLE_TSCN_4_6);
+      const edited = parser.setProperty(
+        scene,
+        "Root/Sprite",
+        "position",
+        "Vector2(0, 0)"
+      );
+      const reparsed = parser.parse(parser.serialize(edited));
+      const sprite = parser.getNodeByPath(reparsed, "Root/Sprite");
+      expect(sprite!.properties["position"]).toBe("Vector2(0, 0)");
+      expect(sprite!.extraAttrs).toEqual(
+        parser.getNodeByPath(scene, "Root/Sprite")!.extraAttrs
+      );
+    });
+
+    it("should be stable across a second roundtrip", () => {
+      const once = parser.serialize(parser.parse(SAMPLE_TSCN_4_6));
+      const twice = parser.serialize(parser.parse(once));
+      expect(twice).toBe(once);
+    });
+  });
+
+  describe("editable instances", () => {
+    it("should parse [editable path=...] sections", () => {
+      const scene = parser.parse(SAMPLE_TSCN_4_6);
+      expect(scene.editables).toEqual(["Enemy"]);
+    });
+
+    it("should re-emit editable sections after connections", () => {
+      const out = parser.serialize(parser.parse(SAMPLE_TSCN_4_6));
+      expect(out).toContain('[editable path="Enemy"]');
+      expect(out.indexOf("[editable")).toBeGreaterThan(out.indexOf("[connection"));
+    });
+
+    it("should emit nothing when a scene has no editable instances", () => {
+      const out = parser.serialize(parser.parse(SAMPLE_TSCN));
+      expect(out).not.toContain("[editable");
+    });
+  });
+
+  describe("load_steps", () => {
+    it("should re-emit load_steps when the source had it", () => {
+      const out = parser.serialize(parser.parse(SAMPLE_TSCN));
+      expect(out).toMatch(/^\[gd_scene load_steps=3 format=3/);
+    });
+
+    it("should not add load_steps to a scene that had none", () => {
+      const scene = parser.parse(SAMPLE_TSCN_4_6);
+      expect(scene.header.loadSteps).toBeUndefined();
+      expect(parser.serialize(scene)).not.toContain("load_steps");
+    });
+  });
+
+
+  describe("node ordering", () => {
+    it("should keep sibling order stable across serialize", () => {
+      const content = `[gd_scene load_steps=1 format=3]
+
+[node name="Root" type="Node2D"]
+
+[node name="A" type="Node2D" parent="."]
+
+[node name="B" type="Node2D" parent="."]
+
+[node name="C" type="Node2D" parent="."]
+`;
+      const scene = parser.parse(content);
+      const once = parser.parse(parser.serialize(scene));
+      expect(once.nodes.map((n) => n.name)).toEqual(["Root", "A", "B", "C"]);
+      const twice = parser.parse(parser.serialize(once));
+      expect(twice.nodes.map((n) => n.name)).toEqual(["Root", "A", "B", "C"]);
     });
   });
 
