@@ -161,18 +161,17 @@ export class TresParser {
   serialize(resource: TresResource): string {
     const lines: string[] = [];
 
-    const loadSteps =
-      resource.extResources.length + resource.subResources.length + 1;
     lines.push(
       "[gd_resource" +
         serializeAttrs(
           [
             ["type", `"${resource.header.type}"`],
-            // Godot 4.6+ omits load_steps; only write it back if it was there.
+            // Godot 4.6+ omits load_steps; write back exactly what the source
+            // had rather than recomputing (see the .tscn serializer).
             [
               "load_steps",
               resource.header.loadSteps !== undefined
-                ? `${loadSteps}`
+                ? `${resource.header.loadSteps}`
                 : undefined,
             ],
             ["format", `${resource.header.format}`],

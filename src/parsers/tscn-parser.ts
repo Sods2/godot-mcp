@@ -125,38 +125,55 @@ function randomHex(len: number): string {
   return result;
 }
 
-function countBraceDepth(s: string): number {
+/**
+ * Scan one line of a property value, continuing from the previous line's
+ * string state. A value can span lines two ways: an open bracket (dict or
+ * array) or an open quote — Godot writes multi-line strings literally, e.g.
+ *
+ *     text = "0/10
+ *     Wood"
+ *
+ * Tracking only bracket depth silently swallows the second line, because it
+ * has no `=` and is skipped as junk.
+ */
+function scanValueLine(
+  s: string,
+  startInString: boolean
+): { depth: number; inString: boolean } {
   let depth = 0;
-  let inStr = false;
+  let inString = startInString;
   let escaped = false;
   for (const ch of s) {
     if (escaped) { escaped = false; continue; }
     if (ch === "\\") { escaped = true; continue; }
-    if (ch === '"') { inStr = !inStr; continue; }
-    if (inStr) continue;
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
     if (ch === "{" || ch === "[") depth++;
     else if (ch === "}" || ch === "]") depth--;
   }
-  return depth;
+  return { depth, inString };
 }
 
-function parseProperties(body: string): Record<string, string> {
+export function parseProperties(body: string): Record<string, string> {
   const props: Record<string, string> = {};
   if (!body) return props;
 
   let currentKey: string | null = null;
   let currentValue = "";
   let depth = 0;
+  let inString = false;
 
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
 
     if (currentKey !== null) {
-      // Accumulating a multi-line value (dict or array)
+      // Accumulating a value that spans lines (dict, array, or string)
       currentValue += "\n" + line;
-      depth += countBraceDepth(trimmed);
-      if (depth <= 0) {
-        props[currentKey] = currentValue.trim();
+      const scan = scanValueLine(line, inString);
+      depth += scan.depth;
+      inString = scan.inString;
+      if (depth <= 0 && !inString) {
+        props[currentKey] = currentValue;
         currentKey = null;
         currentValue = "";
         depth = 0;
@@ -170,20 +187,21 @@ function parseProperties(body: string): Record<string, string> {
     const key = trimmed.slice(0, eqIndex).trim();
     const value = trimmed.slice(eqIndex + 1).trim();
 
-    const d = countBraceDepth(value);
-    if (d > 0) {
-      // Value opens a multi-line block
+    const scan = scanValueLine(value, false);
+    if (scan.depth > 0 || scan.inString) {
+      // Value continues on the following lines
       currentKey = key;
       currentValue = value;
-      depth = d;
+      depth = scan.depth;
+      inString = scan.inString;
     } else {
       props[key] = value;
     }
   }
 
-  // Handle unclosed block (malformed .tscn)
+  // Handle an unterminated value (malformed .tscn)
   if (currentKey !== null) {
-    props[currentKey] = currentValue.trim();
+    props[currentKey] = currentValue;
   }
 
   return props;
@@ -329,16 +347,20 @@ export class TscnParser {
     // Blank-line placement below matches Godot's own writer: ext_resource,
     // connection and editable sections are each written as one contiguous
     // block, while sub_resource and node sections are separated individually.
-    const loadSteps =
-      scene.extResources.length + scene.subResources.length + 1;
     lines.push(
       "[gd_scene" +
         serializeAttrs(
           [
-            // Godot 4.6+ omits load_steps; only write it back if it was there.
+            // Godot 4.6+ omits load_steps; write back exactly what the source
+            // had. It is only a preload hint, and hand-authored scenes can
+            // carry a value that disagrees with the section count — recomputing
+            // would rewrite a line nobody asked us to touch. addExtResource()
+            // keeps it in step when resources are actually added.
             [
               "load_steps",
-              scene.header.loadSteps !== undefined ? `${loadSteps}` : undefined,
+              scene.header.loadSteps !== undefined
+                ? `${scene.header.loadSteps}`
+                : undefined,
             ],
             ["format", `${scene.header.format}`],
             ["uid", scene.header.uid ? `"${scene.header.uid}"` : undefined],
@@ -539,6 +561,10 @@ export class TscnParser {
     const id = `${scene.extResources.length + 1}_${randomHex(3)}`;
     const newScene: TscnScene = {
       ...scene,
+      header:
+        scene.header.loadSteps !== undefined
+          ? { ...scene.header, loadSteps: scene.header.loadSteps + 1 }
+          : scene.header,
       extResources: [...scene.extResources, { type, path, id }],
     };
     return { scene: newScene, id };

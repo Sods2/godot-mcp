@@ -226,9 +226,11 @@ describe("TscnParser", () => {
   });
 
   describe("load_steps", () => {
-    it("should re-emit load_steps when the source had it", () => {
+    it("should re-emit load_steps exactly as the source had it", () => {
+      // SAMPLE_TSCN declares 2 but holds 1 ext + 1 sub resource. load_steps is
+      // only a preload hint, so echo it rather than "correcting" it.
       const out = parser.serialize(parser.parse(SAMPLE_TSCN));
-      expect(out).toMatch(/^\[gd_scene load_steps=3 format=3/);
+      expect(out).toMatch(/^\[gd_scene load_steps=2 format=3/);
     });
 
     it("should not add load_steps to a scene that had none", () => {
@@ -442,5 +444,48 @@ describe("TscnParser", () => {
       const path = parser.buildNodePath(scene.nodes[2], scene.nodes);
       expect(path).toBe("Root/Child/GrandChild");
     });
+  });
+});
+
+describe("TscnParser load_steps handling", () => {
+  const parser = new TscnParser();
+
+  // Hand-authored scenes can carry a load_steps that disagrees with the
+  // section count. It is only a preload hint, so echo it rather than
+  // "correcting" it and rewriting a line nobody asked us to touch.
+  const MISMATCHED = `[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://a.gd" id="Script_a"]
+
+[node name="Root" type="Node2D"]
+`;
+
+  it("echoes a load_steps that disagrees with the section count", () => {
+    expect(parser.serialize(parser.parse(MISMATCHED))).toBe(MISMATCHED);
+  });
+
+  it("bumps load_steps when an ext_resource is actually added", () => {
+    const scene = parser.parse(MISMATCHED);
+    const { scene: updated } = parser.addExtResource(
+      scene,
+      "Texture2D",
+      "res://b.png"
+    );
+    expect(updated.header.loadSteps).toBe(7);
+    expect(parser.serialize(updated)).toContain("load_steps=7");
+  });
+
+  it("does not introduce load_steps when adding to a 4.6+ scene", () => {
+    const scene = parser.parse(`[gd_scene format=3]
+
+[node name="Root" type="Node2D" unique_id=1]
+`);
+    const { scene: updated } = parser.addExtResource(
+      scene,
+      "Texture2D",
+      "res://b.png"
+    );
+    expect(updated.header.loadSteps).toBeUndefined();
+    expect(parser.serialize(updated)).not.toContain("load_steps");
   });
 });

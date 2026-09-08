@@ -118,6 +118,22 @@ describe("engine-written fixtures", () => {
         }
       });
 
+
+      it("keeps a multi-line string property whole", () => {
+        const parser = new TscnParser();
+        const scene = parser.parse(read(version, "text.tscn"));
+        const label = parser.getNodeByPath(scene, "TextRoot/MultiLine");
+        expect(label?.properties["text"]).toBe('"0/10\nWood"');
+      });
+
+      it("keeps a multi-line dictionary property whole", () => {
+        const parser = new TscnParser();
+        const scene = parser.parse(read(version, "text.tscn"));
+        const node = parser.getNodeByPath(scene, "TextRoot/WithDict");
+        expect(node?.properties["metadata/table"]).toContain('"c": [1, 2, 3]');
+        expect(node?.properties["metadata/table"]).toMatch(/^\{[\s\S]*\}$/);
+      });
+
       it("survives an edit without disturbing anything else", () => {
         const parser = new TscnParser();
         const source = read(version, "level.tscn");
