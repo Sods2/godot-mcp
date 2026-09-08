@@ -93,6 +93,11 @@ func _check_deferred(req: Dictionary) -> Variant:
 		var locals: Array = _debugger_ref.get_locals() if _debugger_ref != null else []
 		if not locals.is_empty() or waited >= _DEFERRED_MAX_FRAMES:
 			return {"locals": locals}
+	elif t == "game_screenshot":
+		if _debugger_ref != null and _debugger_ref.has_game_screenshot():
+			return _debugger_ref.consume_game_screenshot()
+		if waited >= _DEFERRED_MAX_FRAMES:
+			return {"error": "The running game did not return a screenshot. The game-side capture autoload may be missing — disable and re-enable the Claude Bridge plugin to reinstall it."}
 	elif t == "output":
 		# Wait a minimum number of frames for output to accumulate, then return
 		if waited >= 5:
@@ -227,7 +232,17 @@ func _handle_message(msg: Dictionary) -> void:
 		"animation.create":
 			result = _animation_handler.create_animation(editor_interface, params)
 		"screenshot.game":
-			result = _screenshot_handler.capture_game(editor_interface)
+			# The game captures itself and replies over the debugger, so the
+			# answer arrives a few frames later; see game_capture.gd. A
+			# debugger session outlives the game, so ask the editor whether a
+			# game is actually running rather than trusting the session.
+			if not editor_interface.is_playing_scene():
+				result = _screenshot_handler.capture_game(editor_interface)
+			elif _debugger_ref != null and _debugger_ref.request_game_screenshot():
+				_deferred_requests.append({"id": id, "type": "game_screenshot", "frames_waited": 0})
+				return
+			else:
+				result = _screenshot_handler.capture_game(editor_interface)
 		"resource.import":
 			result = _inspector_handler.import_asset(editor_interface, params)
 		"resource.read":

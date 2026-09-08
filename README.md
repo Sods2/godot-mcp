@@ -99,6 +99,14 @@ The plugin is required for tools that interact with the running Godot editor (li
 3. Go to **Project > Project Settings > Plugins**
 4. Enable **Claude Bridge**
 
+To screenshot the *running game*, the plugin registers an autoload
+(`ClaudeBridgeGameCapture`) in your project. The editor cannot read the game's
+pixels — Godot runs the game as a separate process — so the capture has to
+happen inside the game and travel back over the debugger connection. The
+autoload does nothing unless a debugger is attached, so exported builds are
+unaffected. To opt out, set `claude_bridge/enable_game_capture` to `false` in
+the editor settings; the autoload is removed on the next editor start.
+
 The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 
 ## Tool Reference

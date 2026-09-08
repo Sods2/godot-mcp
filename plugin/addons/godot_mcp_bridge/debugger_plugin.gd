@@ -12,6 +12,8 @@ var _output_lines: Array[String] = []  # Game print() output
 var _editor_interface: EditorInterface = null
 var _capture_logged: bool = false
 var _output_panel_start: int = 0  # Text length at session start
+var _game_screenshot: Dictionary = {}   # Latest reply from the game's capture autoload
+var _game_screenshot_pending: bool = false
 
 func set_editor_interface(ei: EditorInterface) -> void:
 	_editor_interface = ei
@@ -148,6 +150,11 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 		for frame in data:
 			if frame is Dictionary:
 				_stack_frames.append(frame)
+		return true
+	# Screenshot captured inside the running game by game_capture.gd.
+	if msg == "claude_bridge:screenshot":
+		_game_screenshot = data[0] if data.size() > 0 and data[0] is Dictionary else {"error": "Malformed screenshot payload from the game"}
+		_game_screenshot_pending = false
 		return true
 	if msg == "claude_bridge:locals":
 		_locals = []
@@ -646,3 +653,27 @@ func _extract_single_column_frame(item: TreeItem) -> Dictionary:
 			return parsed
 	# Strategy C: fall back to parsing get_text(0)
 	return _parse_single_column_stack_entry(item.get_text(0))
+
+
+# --- game screenshots -------------------------------------------------------
+# The capture happens in the game process; see game_capture.gd for why.
+
+# Returns false when there is no debugger session to ask.
+func request_game_screenshot() -> bool:
+	_game_screenshot = {}
+	if _active_session == null:
+		return false
+	_game_screenshot_pending = true
+	_active_session.send_message("claude_bridge:capture_request", [])
+	return true
+
+func has_game_screenshot() -> bool:
+	return not _game_screenshot.is_empty()
+
+# Hands over the pending reply and clears it, so a later request cannot be
+# answered with a stale frame.
+func consume_game_screenshot() -> Dictionary:
+	var shot := _game_screenshot
+	_game_screenshot = {}
+	_game_screenshot_pending = false
+	return shot
