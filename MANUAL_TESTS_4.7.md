@@ -1,150 +1,205 @@
-# Manual verification checklist — Godot 4.5 / 4.6 / 4.7
+# Step-by-step verification — Godot 4.5 / 4.6 / 4.7
 
-Everything checkable without a human at the keyboard is automated and passing
-(summary at the bottom). What's left needs the **editor GUI** — the plugin
-returns early under `--headless`, and the debugger panels it reads only exist
-in a real editor window.
+Follow these in order. Every path and filename below is real on this machine.
 
-Budget roughly **30 minutes** for the whole list, or **10 minutes** for
-Part A alone.
+**Time:** Part 1 ≈ 5 min · Part 2 ≈ 10 min · Part 3 ≈ 10 min
 
----
-
-# Part A — the three that actually matter
-
-If you only do three things, do these. They cover every change whose
-behaviour I could not fully reach.
-
-## A1. Debugger panels at a breakpoint ⭐ highest risk
-
-**Why:** 4.7 reorganised the editor's dock hierarchy. The plugin locates
-panels by walking up parent nodes, and I widened that search from 3 levels to
-6 — but I could only verify it compiles and starts, never that it finds the
-panels in a real 4.7 layout. **This is the single most likely thing to be
-broken.**
-
-Do it in **4.7.2 first** (most likely to fail), then 4.6.3.
-
-1. Open a project, enable the plugin (see Setup below).
-2. Open any `.gd` script, click the gutter to set a breakpoint in a function
-   that actually runs.
-3. Press **F5** to play. Wait for it to hit the breakpoint.
-4. With the game paused, ask me — or your MCP client — for:
-   - `godot_get_stack_trace`
-   - `godot_get_locals`
-   - `godot_get_output`
-
-- [ ] **4.7.2** — stack trace returns frames with **non-zero line numbers**
-- [ ] **4.7.2** — locals returns real variable names and values, not `[]`
-- [ ] **4.7.2** — output returns your game's `print()` lines
-- [ ] **4.6.3** — same three
-
-> ❗ If these come back empty on 4.7 but work on 4.6, that is exactly the
-> ancestor-window problem. Tell me and I'll switch to a name-based search
-> instead of a depth-limited one.
-
-## A2. Real-project scene round-trip ⭐ highest value
-
-**Why:** my fixtures are synthetic and small. Your real scenes have tilemaps,
-animations, multi-line sub-resources and node paths that mine don't.
-
-Use a project with **instanced scenes and editable children** — `hammerang`
-or `tetris_inventory` look right.
-
-1. `git status` — make sure it's clean first.
-2. Ask me to run `godot_set_property_in_file` on one node in one scene.
-3. `git diff` that file.
-
-- [ ] Exactly one line differs — the property you changed
-- [ ] No `unique_id=` line changed or vanished
-- [ ] No `[editable path=...]` line vanished
-- [ ] No blank-line-only churn anywhere
-- [ ] `groups=[...]` intact
-- [ ] Now open that scene in Godot, **Ctrl+S**, and `git diff` again — Godot
-      should not rewrite anything you didn't touch
-
-> ⚠️ One expected difference: a node **added** by the MCP tools has no
-> `unique_id` until Godot next saves. You'll see Godot add one attribute to
-> that node alone. That's correct — inventing an id could collide.
-
-## A3. Plugin starts in a real editor
-
-**Why:** I replaced the deprecated `get_editor_interface()` with the
-`EditorInterface` singleton. Verified headless, but not with real docks.
-
-- [ ] **4.6.3** — `[Claude Bridge] Started on port 6008` in the Output panel
-- [ ] **4.7.2** — same
-- [ ] Neither shows red errors mentioning `EditorInterface`, `Invalid call`,
-      or `nonexistent function`
-- [ ] Disable then re-enable the plugin — `Stopped` then `Started`, no errors
+> Since I last handed you a list, a corpus run over all 205 `.tscn`/`.tres`
+> files in `~/Documents/Claude/Games` found two more pre-existing bugs
+> (truncated multi-line strings, rewritten `load_steps`). Both are fixed —
+> all 205 now round-trip byte-identically. **Step 2 is where you confirm that
+> on your own repo.**
 
 ---
 
-# Setup (once per project, per version)
+# Part 1 — Install (do this first)
 
-⚠️ **The plugin is NOT installed by `install.sh`.** It's a manual copy, and
-your existing projects still have the **old** plugin — including the pre-fix
-`bridge_server.gd`. You must re-copy it or A4 below will fail.
+### Step 1.1 — Reinstall the MCP server
 
 ```bash
-cp -R ~/Documents/Claude/Projects/godot-mcp/plugin/addons/godot_mcp_bridge \
-      /path/to/your/project/addons/
+cd ~/Documents/Claude/Projects/godot-mcp && ./scripts/install.sh
 ```
 
-Then in Godot: **Project → Project Settings → Plugins → enable "Claude Bridge"**.
+✅ **Expect** the last lines to include:
 
-To open a specific version:
+```
+Found Godot at: /Users/medrive/Documents/Claude/Games/Godot IDE/Godot_v4.7.2-stable_macos.universal.app/Contents/MacOS/Godot
+```
+
+❌ If it says `WARNING: Could not find Godot automatically`, stop and tell me.
+
+### Step 1.2 — Restart your MCP client
+
+Quit and reopen Claude Code (or whatever client holds the server), so it
+picks up the rebuilt server.
+
+### Step 1.3 — Confirm which Godot it's using
+
+Ask me: **"run godot_get_version"**
+
+✅ **Expect** `4.7.2.stable.official.ed1daf0bf`
+
+> It was silently using **4.5.1** before this work. If you'd rather pin 4.5,
+> set `GODOT_PATH` in your `.mcp.json` and tell me — don't just accept 4.7 if
+> your projects target 4.5. **All your projects declare `config/features =
+> "4.5"`,** so opening them in 4.7 will prompt to upgrade. See the warning in
+> Step 2.1.
+
+---
+
+# Part 2 — Verify your real scene files ⭐ most important
+
+This is the one that protects your repos. **No Godot editor needed for 2.1–2.4.**
+
+### Step 2.1 — Pick the target and check it's clean
 
 ```bash
-open "/Users/medrive/Documents/Claude/Games/Godot IDE/Godot_v4.7.2-stable_macos.universal.app"
+cd ~/Documents/Claude/Games/hammerang && git status --short
+```
+
+✅ **Expect** exactly two modified files:
+`src/digging/Carousel/digging_carousel.gd` and `.tscn`
+
+If anything else is listed, commit or stash first so the diff is readable.
+
+> ⚠️ **Do not open hammerang in 4.6 or 4.7 yet.** It targets 4.5, and opening
+> it in a newer editor will rewrite files project-wide. Steps 2.1–2.4 don't
+> need the editor at all. Only Step 3 opens an editor, and it uses a
+> throwaway copy.
+
+### Step 2.2 — Have me edit a real scene
+
+Ask me: **"in hammerang, set `offset_left` to `-171.0` on
+`UI/MarginContainer/GridContainer/Hideout/TextureButton` in
+`res://src/scenes/digging/digging.tscn`"**
+
+That node already has `offset_left = -170.5` on line 161, so a correct edit
+replaces exactly one existing line — which is what makes the diff below a
+clean pass/fail signal.
+
+### Step 2.3 — Inspect the diff
+
+```bash
+cd ~/Documents/Claude/Games/hammerang && git diff --stat src/scenes/digging/digging.tscn
+```
+
+✅ **Expect** `1 file changed, 1 insertion(+), 1 deletion(-)`
+
+```bash
+cd ~/Documents/Claude/Games/hammerang && git diff src/scenes/digging/digging.tscn
+```
+
+- [ ] Exactly one `-` line and one `+` line
+- [ ] The change is the property I edited, nothing else
+- [ ] No `load_steps=` change on line 1
+- [ ] No `uid=` reordering in the `[ext_resource]` lines
+- [ ] No blank lines added or removed
+
+❌ **Any other change is a bug — send me the diff.**
+
+### Step 2.4 — Revert
+
+```bash
+cd ~/Documents/Claude/Games/hammerang && git checkout src/scenes/digging/digging.tscn
 ```
 
 ---
 
-# Part B — worth doing once
+# Part 3 — Verify the editor plugin
 
-## A4. Signal connect with no scene open
+⚠️ **Use a throwaway copy**, so a 4.7 upgrade prompt can't touch your real work.
 
-The 4.7 bug I found and fixed. Needs the **re-copied** plugin.
-
-1. In 4.7.2, close all scenes (**Scene → Close All**), leave the editor open.
-2. Ask for `godot_connect_signal` on any node.
-
-- [ ] You get "Runtime connection only — no open scene found for persistence"
-- [ ] You do **not** get `EISDIR` or "illegal operation on a directory"
-
-## A5. Screenshots and running
-
-Untested by me — needs a real display, since the plugin renders through
-`SubViewport.get_texture()`.
-
-- [ ] `godot_run_project` starts the game
-- [ ] `godot_take_screenshot` returns an actual image
-- [ ] `godot_stop_project` stops it
-
-## A6. Which Godot your client actually uses
-
-Detection now prefers the **newest** install. It was silently using 4.5.1
-before; it now resolves 4.7.2.
-
-- [ ] Ask me for `godot_get_version` — confirm it says what you expect
-
-To pin a version instead, set it in your `.mcp.json`:
+### Step 3.1 — Make the sandbox
 
 ```bash
-export GODOT_PATH="/Users/medrive/Documents/Claude/Games/Godot.app/Contents/MacOS/Godot"
+rm -rf /tmp/godot-plugin-test && cp -R ~/Documents/Claude/Games/hammerang /tmp/godot-plugin-test && rm -rf /tmp/godot-plugin-test/.git
 ```
 
-## A7. Re-install the server
+### Step 3.2 — Install the plugin into it
 
-`install.sh` now derives `GODOT_PATH` from the same resolver the server uses,
-instead of its own stale list that only knew 4.3–4.5.
+The plugin is **not** installed by `install.sh` — it's a manual copy, and
+this is why your existing projects still hold the pre-fix version.
 
 ```bash
-./scripts/install.sh
+mkdir -p /tmp/godot-plugin-test/addons && cp -R ~/Documents/Claude/Projects/godot-mcp/plugin/addons/godot_mcp_bridge /tmp/godot-plugin-test/addons/
 ```
 
-- [ ] Prints `Found Godot at: .../Godot_v4.7.2-.../Godot` — not a warning
+### Step 3.3 — Open it in 4.7.2
+
+```bash
+open -a "/Users/medrive/Documents/Claude/Games/Godot IDE/Godot_v4.7.2-stable_macos.universal.app" /tmp/godot-plugin-test/project.godot
+```
+
+Accept the "convert project" prompt if it appears — it's a throwaway copy.
+
+### Step 3.4 — Enable the plugin
+
+**Project → Project Settings → Plugins →** tick **Claude Bridge**.
+
+- [ ] Output panel shows `[Claude Bridge] Started on port 6008`
+- [ ] No red errors mentioning `EditorInterface` or `Invalid call`
+- [ ] Untick and re-tick → `Stopped` then `Started`, still no errors
+
+### Step 3.5 — Debugger panels at a breakpoint ⭐ highest risk
+
+**This is the single thing most likely to be broken.** 4.7 reorganised the
+editor's dock hierarchy; the plugin finds panels by walking up parent nodes,
+and I widened that search from 3 to 6 levels. I confirmed it compiles and
+starts, but never that it *finds* the panels in a real 4.7 layout.
+
+1. Open `src/scenes/digging/digging.gd` in the script editor.
+2. Find a line inside `_ready()` and **click the gutter** to set a breakpoint
+   (a red dot appears).
+3. Press **F5** to run the project.
+4. Wait for it to pause at the breakpoint.
+5. With it paused, ask me: **"get the stack trace, locals, and output"**
+
+- [ ] Stack trace returns frames with **non-zero line numbers**
+- [ ] Locals returns real variable names and values, not `[]`
+- [ ] Output returns your `print()` lines
+
+❌ If these are empty on 4.7 but fine on 4.6, that's the ancestor window —
+tell me and I'll switch to a name-based search.
+
+6. Press **F8** to stop.
+
+### Step 3.6 — Signal connect with no scene open
+
+1. **Scene → Close All** (keep the editor open).
+2. Ask me: **"connect a signal on any node"**
+
+- [ ] I report *"Runtime connection only — no open scene found for persistence"*
+- [ ] I do **not** report `EISDIR` or "illegal operation on a directory"
+
+### Step 3.7 — Screenshots and running
+
+Untested by me — needs a real display.
+
+- [ ] Ask me to **"run the project and take a screenshot"** → returns an image
+- [ ] Ask me to **"stop the project"** → it stops
+
+### Step 3.8 — Repeat 3.3–3.6 in 4.6.3
+
+```bash
+rm -rf /tmp/godot-plugin-test-46 && cp -R ~/Documents/Claude/Games/hammerang /tmp/godot-plugin-test-46 && rm -rf /tmp/godot-plugin-test-46/.git && mkdir -p /tmp/godot-plugin-test-46/addons && cp -R ~/Documents/Claude/Projects/godot-mcp/plugin/addons/godot_mcp_bridge /tmp/godot-plugin-test-46/addons/
+```
+
+```bash
+open -a "/Users/medrive/Documents/Claude/Games/Godot IDE/Godot_v4.6.3-stable_macos.universal.app" /tmp/godot-plugin-test-46/project.godot
+```
+
+### Step 3.9 — Clean up
+
+```bash
+rm -rf /tmp/godot-plugin-test /tmp/godot-plugin-test-46
+```
+
+---
+
+# When you're done
+
+Tell me which boxes failed. If everything passes, the branch
+`feature/godot-4.7-compat` is ready and I'll walk you through merging.
 
 ---
 
@@ -154,20 +209,18 @@ Automated against **all three installs: 4.5.1, 4.6.3, 4.7.2**.
 
 | Check | Result |
 |---|---|
-| 18 engine-written fixtures round-trip byte-identically | ✅ |
+| **All 205 real `.tscn`/`.tres` files in `~/Documents/Claude/Games` round-trip byte-identically** | ✅ |
+| 21 engine-written fixtures round-trip byte-identically | ✅ |
 | Real MCP server driven over stdio by an MCP client — 50 tool assertions | ✅ |
-| MCP-written scenes reload in the engine, groups/instances/editable/binds intact | ✅ |
+| MCP-written scenes reload in the engine; groups, instances, editable, binds intact | ✅ |
 | MCP over the **live bridge**: `godot_open_scene`, `godot_get_scene_tree`, `godot_connect_signal` | ✅ |
 | Signal persistence keeps every `unique_id`, `[editable]`, group, instance link | ✅ |
 | All 13 plugin GDScript files compile | ✅ |
 | Plugin `_enter_tree` runs, bridge binds 6008, clean shutdown | ✅ |
 | `StreamPeerTCP.STATUS_*` and moved `TCPServer` methods resolve | ✅ (audit item 3) |
-| `.tres` `ext_resource` sections preserved — no orphaned references | ✅ |
-| 258 unit tests, lint and build clean | ✅ |
+| `.tres` `ext_resource` preserved — no orphaned references | ✅ |
+| Multi-line string and dictionary properties preserved | ✅ |
+| 270 unit tests, lint and build clean | ✅ |
 
-Earlier versions are covered explicitly, not incidentally: 4.5.1 writes
-`load_steps` and no `unique_id`; 4.6+ does the reverse. The parser reproduces
-each exactly rather than imposing one version's conventions on the other.
-
-**What none of this reaches:** the real editor's dock layout (A1, A3), a
-real display (A5), and your actual project files (A2).
+**What none of this reaches:** the real editor's dock layout (3.4, 3.5) and a
+real display (3.7). That's the whole reason Part 3 exists.
