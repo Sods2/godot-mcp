@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://actor.gd" id="1_3fcyo"]
+
+[node name="Enemy" type="CharacterBody2D" unique_id=458314527]
+script = ExtResource("1_3fcyo")
+
+[node name="Body" type="CollisionShape2D" parent="." unique_id=1019821999]
+
+[node name="Sprite" type="Sprite2D" parent="." unique_id=558523044]
+position = Vector2(3, 3)
+
+[node name="Extra" type="Label" parent="." unique_id=2005134124]

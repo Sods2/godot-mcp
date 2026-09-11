@@ -12,6 +12,8 @@ var _output_lines: Array[String] = []  # Game print() output
 var _editor_interface: EditorInterface = null
 var _capture_logged: bool = false
 var _output_panel_start: int = 0  # Text length at session start
+var _game_screenshot: Dictionary = {}   # Latest reply from the game's capture autoload
+var _game_screenshot_pending: bool = false
 
 func set_editor_interface(ei: EditorInterface) -> void:
 	_editor_interface = ei
@@ -148,6 +150,11 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 		for frame in data:
 			if frame is Dictionary:
 				_stack_frames.append(frame)
+		return true
+	# Screenshot captured inside the running game by game_capture.gd.
+	if msg == "claude_bridge:screenshot":
+		_game_screenshot = data[0] if data.size() > 0 and data[0] is Dictionary else {"error": "Malformed screenshot payload from the game"}
+		_game_screenshot_pending = false
 		return true
 	if msg == "claude_bridge:locals":
 		_locals = []
@@ -420,6 +427,43 @@ func _read_stack_from_editor_ui() -> Array:
 			return frames
 	return frames
 
+# Read stack variables from the debugger's EditorDebuggerInspector.
+#
+# Its edited object (EditorDebuggerRemoteObject/-Objects) exposes the current
+# frame's variables as properties named "Locals/x", "Members/y" and
+# "Globals/z". The debugger session's own stack_frame_vars message never
+# reaches _capture() — Godot routes unprefixed core messages to the built-in
+# debugger, not to EditorDebuggerPlugin captures — so this is the only path
+# that works.
+func _read_locals_from_debugger_inspector(debugger: Node) -> Array:
+	for child in _get_all_children(debugger):
+		if not child.get_class().containsn("debuggerinspector"):
+			continue
+		if not child.has_method("get_edited_object"):
+			continue
+		var obj = child.get_edited_object()
+		if obj == null:
+			continue
+		var locals := []
+		for prop in obj.get_property_list():
+			var prop_name: String = str(prop.get("name", ""))
+			var slash := prop_name.find("/")
+			if slash <= 0:
+				continue  # "script" and other object bookkeeping
+			var scope := prop_name.substr(0, slash)
+			if not (scope == "Locals" or scope == "Members" or scope == "Globals"):
+				continue
+			locals.append({
+				"name": prop_name.substr(slash + 1),
+				"value": str(obj.get(prop_name)),
+				"scope": scope,
+			})
+		# Several inspectors exist (the expression evaluator has one too);
+		# use the first that actually holds frame variables.
+		if not locals.is_empty():
+			return locals
+	return []
+
 func _read_locals_from_editor_ui() -> Array:
 	var base := _get_editor_base()
 	if base == null:
@@ -427,7 +471,13 @@ func _read_locals_from_editor_ui() -> Array:
 	var debugger := _find_node_of_class(base, "ScriptEditorDebugger")
 	if debugger == null:
 		return []
-	# Scan all Trees in the debugger, skip stack trees and known non-locals trees
+	# Strategy 1: the debugger's own inspector. Godot shows stack variables in
+	# an EditorDebuggerInspector, not a Tree, so the Tree scan below never sees
+	# them. Verified on 4.5.1, 4.6.3 and 4.7.2.
+	var from_inspector := _read_locals_from_debugger_inspector(debugger)
+	if not from_inspector.is_empty():
+		return from_inspector
+	# Strategy 2: scan all Trees in the debugger, skip stack trees and known non-locals trees
 	var locals := []
 	for child in _get_all_children(debugger):
 		if not (child is Tree):
@@ -473,9 +523,12 @@ func _find_node_of_class(root: Node, class_name_str: String, parent_class: Strin
 		if child.get_class() == class_name_str or child.is_class(class_name_str):
 			if parent_class == "":
 				return child
-			# Check ancestors up to 3 levels (handles intermediate containers like VBoxContainer)
+			# Check ancestors up to 6 levels. Godot reorganizes the editor's
+			# container hierarchy between releases (4.6 turned bottom panels into
+			# docks and added an "hb" level; 4.7 reshuffled again), so leave
+			# headroom above the 3 levels the deepest known layout needs.
 			var ancestor: Node = child.get_parent()
-			for _i in range(3):
+			for _i in range(6):
 				if ancestor == null:
 					break
 				if ancestor.get_class() == parent_class or ancestor.is_class(parent_class):
@@ -600,3 +653,27 @@ func _extract_single_column_frame(item: TreeItem) -> Dictionary:
 			return parsed
 	# Strategy C: fall back to parsing get_text(0)
 	return _parse_single_column_stack_entry(item.get_text(0))
+
+
+# --- game screenshots -------------------------------------------------------
+# The capture happens in the game process; see game_capture.gd for why.
+
+# Returns false when there is no debugger session to ask.
+func request_game_screenshot() -> bool:
+	_game_screenshot = {}
+	if _active_session == null:
+		return false
+	_game_screenshot_pending = true
+	_active_session.send_message("claude_bridge:capture_request", [])
+	return true
+
+func has_game_screenshot() -> bool:
+	return not _game_screenshot.is_empty()
+
+# Hands over the pending reply and clears it, so a later request cannot be
+# answered with a stale frame.
+func consume_game_screenshot() -> Dictionary:
+	var shot := _game_screenshot
+	_game_screenshot = {}
+	_game_screenshot_pending = false
+	return shot

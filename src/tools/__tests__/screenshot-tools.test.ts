@@ -56,3 +56,44 @@ describe("screenshot-tools", () => {
     });
   });
 });
+
+describe("screenshot error handling", () => {
+  // The bridge reports failures as { error } in the result. Building an image
+  // block from that produces data: undefined, which fails MCP schema
+  // validation and kills the call instead of reporting the message.
+  it("returns a readable error when the bridge reports one", async () => {
+    const mockServer = createMockServer();
+    const mockBridge = createMockBridge({ connected: true });
+    registerScreenshotTools(mockServer.server, mockBridge);
+    mockBridge._setResponse("screenshot.game", {
+      error: "No game is currently running",
+    });
+
+    const result = await mockServer.callTool("godot_take_game_screenshot", {});
+    expect(result.isError).toBe(true);
+    expect(result.content[0].type).toBe("text");
+    expect(result.content[0].text).toContain("No game is currently running");
+  });
+
+  it("returns an error rather than an empty image block", async () => {
+    const mockServer = createMockServer();
+    const mockBridge = createMockBridge({ connected: true });
+    registerScreenshotTools(mockServer.server, mockBridge);
+    mockBridge._setResponse("screenshot.viewport", { success: true });
+
+    const result = await mockServer.callTool("godot_take_screenshot", {});
+    expect(result.isError).toBe(true);
+    expect(result.content[0].type).toBe("text");
+  });
+
+  it("returns an image block when the bridge returns data", async () => {
+    const mockServer = createMockServer();
+    const mockBridge = createMockBridge({ connected: true });
+    registerScreenshotTools(mockServer.server, mockBridge);
+    mockBridge._setResponse("screenshot.viewport", { data: "aGk=", success: true });
+
+    const result = await mockServer.callTool("godot_take_screenshot", {});
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].type).toBe("image");
+  });
+});

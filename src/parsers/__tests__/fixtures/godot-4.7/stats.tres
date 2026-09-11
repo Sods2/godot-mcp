@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StatsRes" format=3]
+
+[ext_resource type="Resource" path="res://inner.tres" id="1_nxyks"]
+[ext_resource type="Script" path="res://stats.gd" id="2_uwwlw"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_st0mh"]
+sky_top_color = Color(0.2, 0.4, 0.8, 1)
+
+[resource]
+script = ExtResource("2_uwwlw")
+hp = 42
+nested = ExtResource("1_nxyks")
+metadata/sub = SubResource("ProceduralSkyMaterial_st0mh")

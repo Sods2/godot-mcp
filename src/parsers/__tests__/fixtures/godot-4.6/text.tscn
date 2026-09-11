@@ -1,0 +1,14 @@
+[gd_scene format=3]
+
+[node name="TextRoot" type="Node2D" unique_id=383104339]
+
+[node name="MultiLine" type="Label" parent="." unique_id=2142776821]
+text = "0/10
+Wood"
+
+[node name="WithDict" type="Node2D" parent="." unique_id=1016830233]
+metadata/table = {
+"a": 1,
+"b": "two",
+"c": [1, 2, 3]
+}

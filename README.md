@@ -39,7 +39,7 @@ Many tools work in a hybrid mode: they use the live editor bridge when available
 ## Prerequisites
 
 - **Node.js** 18 or later
-- **Godot** 4.3 or later
+- **Godot** 4.3 through 4.7 — verified against 4.6.3 and 4.7.2. Scene files round-trip byte-identically: node identity (`unique_id`), groups, instance links, editable instances and signal binds are all preserved
 - **Claude Code** or another MCP-compatible client
 
 ## Installation
@@ -98,6 +98,14 @@ The plugin is required for tools that interact with the running Godot editor (li
 2. Open the project in the Godot editor
 3. Go to **Project > Project Settings > Plugins**
 4. Enable **Claude Bridge**
+
+To screenshot the *running game*, the plugin registers an autoload
+(`ClaudeBridgeGameCapture`) in your project. The editor cannot read the game's
+pixels — Godot runs the game as a separate process — so the capture has to
+happen inside the game and travel back over the debugger connection. The
+autoload does nothing unless a debugger is attached, so exported builds are
+unaffected. To opt out, set `claude_bridge/enable_game_capture` to `false` in
+the editor settings; the autoload is removed on the next editor start.
 
 The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 
