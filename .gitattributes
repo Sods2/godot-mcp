@@ -6,6 +6,8 @@
 .DS_Store            export-ignore
 CLAUDE.md            export-ignore
 MANUAL_TESTS.md      export-ignore
+MANUAL_TESTS_4.7.md  export-ignore
+compat-audit-2026-09.md export-ignore
 .prettierrc          export-ignore
 eslint.config.mjs    export-ignore
 .mcp.json.example    export-ignore

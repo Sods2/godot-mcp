@@ -2,14 +2,15 @@
 
 Follow these in order. Every path and filename below is real on this machine.
 
-**Time:** Part 1 ≈ 5 min · Part 2 ≈ 10 min · Part 3 ≈ 10 min
+**Time:** Part 1 ≈ 5 min · Part 2 ≈ 10 min · Part 3 ≈ 2 min
 
 > Most of this is now done. Using `new-godot-mcp-tester-project` I drove the
 > **real GUI editor** on all three versions over MCP — including breakpoints,
-> stack traces and output. **Part 3 is now a results table, not a task list.**
+> stack traces, output and screenshots. **Part 3 is now a results table, not a
+> task list.**
 >
 > What still needs you: **Part 2** (one diff against your own repo) and
-> **Step 3.1** (screenshots, which need a real display).
+> **Step 3.1** (stopping the game, which was never recorded).
 
 ---
 
@@ -131,7 +132,7 @@ cd ~/Documents/Claude/Games/hammerang && git checkout src/scenes/digging/digging
 
 Using `new-godot-mcp-tester-project`, I launched the **real GUI editor** on
 all three versions with the plugin enabled and drove it over MCP. Results
-were identical on 4.5.1, 4.6.3 and 4.7.2 — **10 passed, 1 failed** each:
+were identical on 4.5.1, 4.6.3 and 4.7.2 — **everything passed** on each:
 
 | Check | 4.5.1 | 4.6.3 | 4.7.2 |
 |---|:--:|:--:|:--:|
@@ -144,6 +145,9 @@ were identical on 4.5.1, 4.6.3 and 4.7.2 — **10 passed, 1 failed** each:
 | **`godot_get_stack_trace` — frames with real line numbers** | ✅ | ✅ | ✅ |
 | **`godot_get_output` — the game's print() lines** | ✅ | ✅ | ✅ |
 | `godot_get_locals` | ✅ | ✅ | ✅ |
+| `godot_take_screenshot` — a real editor PNG | ✅ | ✅ | ✅ |
+| **`godot_take_game_screenshot` — a real frame from the running game** | ✅ | ✅ | ✅ |
+| `godot_take_game_screenshot` with no game running — a clear error | ✅ | ✅ | ✅ |
 
 **The highest-risk item passed.** Stack trace and output both go through
 `_find_node_of_class` and the ancestor window I widened, and both work on
@@ -161,10 +165,25 @@ Now reads that inspector. Verified over MCP against a real GUI editor on all
 three versions — locals, members and values all return, each tagged with its
 scope.
 
-## What's left for you: Step 3.1 — screenshots
+## Screenshots — found broken, now fixed
 
-The only thing I could not verify, because it needs a real display and
-renders through `SubViewport.get_texture()`.
+`godot_take_game_screenshot` returned a 2x2 PNG that was not the game — it
+captured the 2D editor's viewport. Godot runs the game as a separate process
+and, since 4.4, embeds its window rather than rendering into a SubViewport, so
+the editor has no game texture to read. Separately, both screenshot tools
+crashed the MCP call on any error instead of showing the message.
+
+The game now captures itself: the plugin adds a `ClaudeBridgeGameCapture`
+autoload that reads the game's own viewport and sends the PNG back over the
+debugger connection. Verified over MCP against a real GUI editor on all three
+versions — `godot_take_screenshot` returns a real editor PNG, the autoload
+installs itself, a real game frame comes back, and with no game running the
+tool reports a clear error instead of hanging.
+
+## What's left for you: Step 3.1 — stopping the game
+
+Screenshots are verified (above). The one plugin action never recorded is
+stopping the game, so check it once.
 
 Open the tester project:
 
@@ -175,13 +194,11 @@ open -a "/Users/medrive/Documents/Claude/Games/Godot IDE/Godot_v4.7.2-stable_mac
 The plugin is already installed and enabled there, and `main.tscn` is the main
 scene.
 
-- [ ] Ask me to **"run the project and take a screenshot"** → returns an image
-- [ ] Ask me to **"stop the project"** → it stops
+- [ ] Ask me to **"run the project, then stop it"** → it starts, then stops
 
 # When you're done
 
-Tell me which boxes failed. If everything passes, the branch
-`feature/godot-4.7-compat` is ready and I'll walk you through merging.
+Tell me which boxes failed.
 
 ---
 
@@ -208,12 +225,13 @@ Homebrew.)
 | All 13 plugin GDScript files compile | ✅ | ✅ | ✅ |
 | `StreamPeerTCP.STATUS_*` + moved `TCPServer` methods resolve | ✅ | ✅ | ✅ |
 | `godot_get_locals` | ✅ | ✅ | ✅ |
+| Screenshots — editor, running game, and no-game error | ✅ | ✅ | ✅ |
 
 Version-independent (parser only, no engine involved):
 
 | Check | Result |
 |---|---|
 | All 205 real `.tscn`/`.tres` files in `~/Documents/Claude/Games` round-trip byte-identically | ✅ |
-| 271 unit tests, lint and build clean | ✅ |
+| 274 unit tests, lint and build clean | ✅ |
 
-**What none of this reaches:** screenshots, which need a real display.
+**Not recorded:** stopping the game — see Step 3.1.
