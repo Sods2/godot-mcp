@@ -27,7 +27,7 @@ import { resolveProjectPath } from "./project-utils.js";
 
 const server = new McpServer({
   name: "godot-mcp",
-  version: "1.1.0",
+  version: "1.1.1",
 });
 
 const processManager = new ProcessManager();
