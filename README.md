@@ -38,7 +38,7 @@ Many tools work in a hybrid mode: they use the live editor bridge when available
 
 ## Prerequisites
 
-- **Node.js** 18 or later
+- **Node.js** 18 or later, with **npm 10 or later** (older npm can crash while installing dependencies — upgrade with `npm install -g npm@latest`)
 - **Godot** 4.3 through 4.7 — verified against 4.6.3 and 4.7.2. Scene files round-trip byte-identically: node identity (`unique_id`), groups, instance links, editable instances and signal binds are all preserved
 - **Claude Code** or another MCP-compatible client
 
@@ -50,10 +50,23 @@ Many tools work in a hybrid mode: they use the live editor bridge when available
 git clone https://github.com/Sods2/godot-mcp.git
 cd godot-mcp
 npm install
+```
+
+Then run the installer for your platform:
+
+**macOS / Linux:**
+```bash
 ./scripts/install.sh
 ```
 
-The install script compiles TypeScript, copies the build output to `~/.claude/mcp-servers/godot-mcp/`, and installs production dependencies there.
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+> Windows users: run the PowerShell installer rather than the bash script under Git Bash — Git Bash often ships an old, crash-prone npm.
+
+The installer compiles TypeScript, copies the build output to `~/.claude/mcp-servers/godot-mcp/` (`%USERPROFILE%\.claude\mcp-servers\godot-mcp\` on Windows), installs production dependencies there, and prints a ready-to-paste `.mcp.json` snippet with your Godot path pre-filled.
 
 ### 2. Add the server to your project's `.mcp.json`
 

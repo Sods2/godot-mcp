@@ -5,6 +5,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 DEST="$HOME/.claude/mcp-servers/godot-mcp"
 
+# Preflight: make sure node and npm are present and new enough. An old npm
+# (<10) can crash while resolving this dependency tree with a cryptic
+# "Cannot read properties of null (reading 'edgesOut')" and leave a
+# half-installed server, so fail early with a clear fix instead.
+if ! command -v node >/dev/null 2>&1; then
+  echo "ERROR: node is not on PATH. Install Node.js 18 or later from https://nodejs.org" >&2
+  exit 1
+fi
+if ! command -v npm >/dev/null 2>&1; then
+  echo "ERROR: npm is not on PATH. Install Node.js 18 or later from https://nodejs.org" >&2
+  exit 1
+fi
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+if [ "$NODE_MAJOR" -lt 18 ]; then
+  echo "ERROR: Node.js 18 or later is required (found $(node --version))." >&2
+  exit 1
+fi
+NPM_MAJOR="$(npm --version 2>/dev/null | cut -d. -f1)"
+if [ -n "$NPM_MAJOR" ] && [ "$NPM_MAJOR" -lt 10 ]; then
+  echo "WARNING: npm $(npm --version) is old and can crash while installing." >&2
+  echo "         If this run fails, upgrade with: npm install -g npm@latest" >&2
+fi
+
 # Build first
 cd "$PROJECT_DIR"
 npm run build
@@ -14,7 +37,22 @@ mkdir -p "$DEST"
 cp -r "$PROJECT_DIR/build" "$DEST/"
 cp -r "$PROJECT_DIR/scripts" "$DEST/"
 cp "$PROJECT_DIR/package.json" "$DEST/"
-cd "$DEST" && npm install --omit=dev
+# Don't let `set -e` abort on an npm failure here — we want the verification
+# below to run and print an actionable message instead of a raw crash.
+cd "$DEST" && npm install --omit=dev || true
+
+# Verify the dependency install actually landed. If npm failed or was
+# interrupted, the copy above still leaves build/ and package.json in place,
+# which looks installed but has no node_modules — the server would fail at
+# startup with "Cannot find module '@modelcontextprotocol/sdk'". Fail loudly.
+if [ ! -d "$DEST/node_modules/@modelcontextprotocol/sdk" ]; then
+  echo "" >&2
+  echo "ERROR: dependency install failed — $DEST/node_modules is incomplete." >&2
+  echo "  Re-run with a current npm (>=10):" >&2
+  echo "    cd \"$DEST\" && npm install --omit=dev" >&2
+  echo "  If npm crashes with an 'edgesOut' error, first: npm install -g npm@latest" >&2
+  exit 1
+fi
 
 echo "Installed to $DEST"
 echo ""

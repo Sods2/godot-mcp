@@ -1,6 +1,9 @@
 # Parser round-trip fixtures are byte-compared; force LF so tests pass on Windows too
 src/parsers/__tests__/fixtures/** text eol=lf
 
+# Shell scripts must stay LF or the shebang breaks on macOS/Linux
+*.sh text eol=lf
+
 # Exclude dev-only files from git archive / GitHub ZIP downloads
 .github/             export-ignore
 .claude/             export-ignore
