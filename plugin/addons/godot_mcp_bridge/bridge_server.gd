@@ -166,6 +166,13 @@ func _process(_delta: float) -> void:
 				_handle_message(msg)
 
 func _handle_message(msg: Dictionary) -> void:
+	# Guarantee handlers exist before dispatch. Godot can reload @tool scripts
+	# after a fresh project finishes importing, which resets instance state to
+	# null while the socket stays open — without this every call would fail with
+	# "Nonexistent function ... in base 'Nil'". Idempotent, so it is a cheap
+	# null-check once handlers are set.
+	_ensure_handlers()
+
 	var id = msg.get("id", null)
 	var method: String = msg.get("method", "")
 	var params: Dictionary = msg.get("params", {})
