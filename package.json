@@ -23,6 +23,7 @@
     "start": "node build/index.js",
     "test": "vitest run",
     "test:gd": "bash scripts/run-gdscript-tests.sh",
+    "test:bridge": "node tests/bridge/bridge-harness.mjs",
     "lint": "eslint src/",
     "format": "prettier --write src/"
   },

@@ -50,3 +50,40 @@ jobs:
         run: npm run test:gd
         env:
           GODOT_PATH: /usr/local/bin/godot
+
+  bridge-e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Godot + virtual display
+        run: |
+          GODOT_VER=4.3-stable
+          curl -fL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VER}/Godot_v${GODOT_VER}_linux.x86_64.zip"
+          unzip -q godot.zip
+          sudo mv "Godot_v${GODOT_VER}_linux.x86_64" /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1 mesa-vulkan-drivers
+          godot --version
+
+      - name: Run editor-bridge end-to-end tests
+        # The addon disables itself under --headless, so drive the real editor
+        # under a virtual display with a software renderer.
+        run: xvfb-run -a npm run test:bridge
+        env:
+          GODOT_PATH: /usr/local/bin/godot
+          GODOT_EDITOR_ARGS: "--rendering-driver opengl3"
