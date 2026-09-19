@@ -37,6 +37,16 @@ var _deferred_requests: Array = []
 const _DEFERRED_MAX_FRAMES: int = 60  # ~1s at 60fps before giving up (allows round-trip for get_stack_dump)
 
 func _ready() -> void:
+	_ensure_handlers()
+
+# Instantiate the per-request handlers. Called from both _ready() and start():
+# on a freshly imported project the node can begin listening before _ready()
+# has run, which would leave every handler null and fail every request with
+# "Nonexistent function ... in base 'Nil'". Idempotent, so the second call is a
+# no-op.
+func _ensure_handlers() -> void:
+	if _scene_handler != null:
+		return
 	_protocol = _ProtocolScript.new()
 	_scene_handler = _SceneHandlerScript.new()
 	_inspector_handler = _InspectorHandlerScript.new()
@@ -54,6 +64,7 @@ func set_profiler_handler(debugger) -> void:
 	_profiler_handler = _ProfilerHandlerScript.new(debugger)
 
 func start(port: int = 6008) -> void:
+	_ensure_handlers()
 	_tcp_server = TCPServer.new()
 	var err := _tcp_server.listen(port, "127.0.0.1")
 	if err != OK:
@@ -155,6 +166,13 @@ func _process(_delta: float) -> void:
 				_handle_message(msg)
 
 func _handle_message(msg: Dictionary) -> void:
+	# Guarantee handlers exist before dispatch. Godot can reload @tool scripts
+	# after a fresh project finishes importing, which resets instance state to
+	# null while the socket stays open — without this every call would fail with
+	# "Nonexistent function ... in base 'Nil'". Idempotent, so it is a cheap
+	# null-check once handlers are set.
+	_ensure_handlers()
+
 	var id = msg.get("id", null)
 	var method: String = msg.get("method", "")
 	var params: Dictionary = msg.get("params", {})

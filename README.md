@@ -39,12 +39,15 @@ Many tools work in a hybrid mode: they use the live editor bridge when available
 ### Development
 
 ```bash
-npm run build     # compile TypeScript to build/
-npm test          # run the vitest suite (Node side, no Godot needed)
-npm run test:gd   # run the headless GDScript tests (requires Godot; set GODOT_PATH)
+npm run build      # compile TypeScript to build/
+npm test           # run the vitest suite (Node side, no Godot needed)
+npm run test:gd    # headless GDScript tests (requires Godot; set GODOT_PATH)
+npm run test:bridge # editor-bridge end-to-end (boots the editor; set GODOT_PATH)
 ```
 
 `npm run test:gd` builds a throwaway project with the editor plugin installed and runs every test in `tests/gdscript/` headlessly, exiting non-zero on any failure.
+
+`npm run test:bridge` boots a real Godot editor with the addon, drives the bridge tools through the MCP server over the 6008 socket, and asserts the editor changed — the only automated check of the full MCP → bridge → editor path. On a headless host (CI) run it under `xvfb-run` with a software renderer (`GODOT_EDITOR_ARGS="--rendering-driver opengl3"`).
 
 ## Prerequisites
 
