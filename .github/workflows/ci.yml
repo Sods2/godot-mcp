@@ -70,7 +70,8 @@ jobs:
 
       - name: Install Godot + virtual display
         run: |
-          GODOT_VER=4.3-stable
+          # 4.4+ for the deterministic `--import` pre-pass the harness relies on.
+          GODOT_VER=4.4-stable
           curl -fL -o godot.zip \
             "https://github.com/godotengine/godot/releases/download/${GODOT_VER}/Godot_v${GODOT_VER}_linux.x86_64.zip"
           unzip -q godot.zip

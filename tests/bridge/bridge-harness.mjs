@@ -178,16 +178,21 @@ async function run() {
     console.error("--------------------------------------");
   };
 
-  // 2a. Pre-import the project once, headlessly, so the interactive editor is
-  //     not still scanning/importing the filesystem when the bridge test drives
-  //     it — that blocks the main thread and times out bridge requests. On a
-  //     fresh CI project there is no .godot/ cache, so this is essential.
-  console.log("Pre-importing project (headless) ...");
+  // 2a. Pre-import the project once, headlessly, so the interactive editor
+  //     loads a fully-built .godot cache — with COMPILED scripts. On a fresh
+  //     project the addon's preloaded scripts are otherwise not compiled when
+  //     the plugin first starts, and every handler .new() fails with
+  //     "Nonexistent function 'new' in base 'GDScript'". `--import` (Godot 4.4+)
+  //     imports every resource and compiles every script, then exits.
+  console.log("Pre-importing project (headless --import) ...");
+  const importLog = path.join(proj, "import.log");
   await new Promise((res) => {
-    const imp = spawn(GODOT, ["--headless", "--path", proj, "--editor", "--quit-after", "1000"], {
-      stdio: "ignore",
+    const impFd = openSync(importLog, "w");
+    const imp = spawn(GODOT, ["--headless", "--path", proj, "--import"], {
+      stdio: ["ignore", impFd, impFd],
     });
-    const t = setTimeout(() => imp.kill(), 90000);
+    closeSync(impFd);
+    const t = setTimeout(() => imp.kill(), 120000);
     imp.on("exit", () => {
       clearTimeout(t);
       res();
@@ -269,9 +274,11 @@ async function run() {
     // A pristine editor (as in CI) opens no scene tab, so get_edited_scene_root()
     // is null and every scene op fails. Open the scene explicitly and wait for
     // the edited root to be live before asserting.
-    await client.call("godot_open_scene", { scene_path: "res://main.tscn" });
+    // Retry the open+read: on first launch the editor may still be finishing
+    // plugin/script setup, so give it a generous warm-up window.
     let sceneReady = false;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 45; i++) {
+      await client.call("godot_open_scene", { scene_path: "res://main.tscn" });
       await sleep(1000);
       const t = await client.call("godot_get_scene_tree");
       if (/"name":\s*"Main"/.test(t.text)) {
