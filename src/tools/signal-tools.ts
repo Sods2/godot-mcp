@@ -33,12 +33,22 @@ async function persistConnection(
   remove: boolean
 ): Promise<string> {
   // Get the currently open scene from editor
-  const status = await bridge.send<{ open_scenes?: string[] }>("editor.status", {});
+  const status = await bridge.send<{ open_scenes?: string[]; project_path?: string }>(
+    "editor.status",
+    {}
+  );
   const openScenes = openScenePaths(status.open_scenes);
   if (openScenes.length === 0) return "Runtime connection only — no open scene found for persistence";
 
   const scenePath = openScenes[0];
-  const projectDir = resolveProjectPath();
+  // Prefer the project root reported by the live editor over cwd/env
+  // auto-detection: the MCP server rarely runs from inside the project, so
+  // resolveProjectPath() would otherwise fail and the connection would never
+  // persist to the .tscn.
+  const projectDir =
+    status.project_path && status.project_path.length > 0
+      ? status.project_path
+      : resolveProjectPath();
   const filePath = resolveResPath(projectDir, scenePath);
   const content = await readFile(filePath, "utf-8");
   let scene = _parser.parse(content);

@@ -36,6 +36,16 @@ The integration has two components:
 
 Many tools work in a hybrid mode: they use the live editor bridge when available, and fall back to file-based parsing when the editor is not running.
 
+### Development
+
+```bash
+npm run build     # compile TypeScript to build/
+npm test          # run the vitest suite (Node side, no Godot needed)
+npm run test:gd   # run the headless GDScript tests (requires Godot; set GODOT_PATH)
+```
+
+`npm run test:gd` builds a throwaway project with the editor plugin installed and runs every test in `tests/gdscript/` headlessly, exiting non-zero on any failure.
+
 ## Prerequisites
 
 - **Node.js** 18 or later, with **npm 10 or later** (older npm can crash while installing dependencies — upgrade with `npm install -g npm@latest`)
