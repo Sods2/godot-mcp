@@ -22,6 +22,7 @@
     "dev": "tsc --watch",
     "start": "node build/index.js",
     "test": "vitest run",
+    "test:gd": "bash scripts/run-gdscript-tests.sh",
     "lint": "eslint src/",
     "format": "prettier --write src/"
   },

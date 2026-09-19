@@ -41,8 +41,16 @@ func connect_signal(editor_interface: EditorInterface, params: Dictionary) -> Di
 	var callable = Callable(to_node, method_name)
 	if not to_node.has_method(method_name):
 		return {"error": "Target node has no method: " + method_name}
-	from_node.connect(signal_name, callable, flags)
-	return {"success": true, "warning": "Runtime connection only — will not persist when the scene is saved/reloaded"}
+	# Connecting an already-connected signal pushes a Godot error, so treat a
+	# repeat as an idempotent success instead.
+	if from_node.is_connected(signal_name, callable):
+		return {"success": true, "already_connected": true}
+	# CONNECT_PERSIST makes this a scene connection that PackedScene stores, so it
+	# survives saving/reloading in the editor and stays in step with the
+	# [connection] entry the MCP server also writes to the .tscn. Without it the
+	# editor would drop the connection on save and clobber that entry.
+	from_node.connect(signal_name, callable, flags | CONNECT_PERSIST)
+	return {"success": true, "persistent": true}
 
 func disconnect_signal(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var root = editor_interface.get_edited_scene_root()

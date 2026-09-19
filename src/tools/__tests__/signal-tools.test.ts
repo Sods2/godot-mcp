@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { createMockServer } from "../../__tests__/helpers/mock-server.js";
 import { createMockBridge } from "../../__tests__/helpers/mock-bridge.js";
 import { registerSignalTools } from "../signal-tools.js";
+
+const MINIMAL_SCENE =
+  '[gd_scene format=3]\n\n[node name="Main" type="Node2D"]\n\n' +
+  '[node name="Button" type="Button" parent="."]\n\n' +
+  '[node name="Player" type="Node2D" parent="."]\n';
 
 describe("signal-tools", () => {
   let mockServer: ReturnType<typeof createMockServer>;
@@ -112,6 +120,34 @@ describe("signal-tools", () => {
       });
       expect(result.isError).toBe(true);
     });
+
+    it("persists the connection to the scene file using the editor-reported project_path", async () => {
+      const dir = mkdtempSync(path.join(tmpdir(), "godot-mcp-sig-"));
+      try {
+        const scene = path.join(dir, "main.tscn");
+        writeFileSync(scene, MINIMAL_SCENE, "utf-8");
+        mockBridge._setResponse("signal.connect", { success: true });
+        // The MCP server rarely runs from inside the project, so persistence
+        // must use the project root the live editor reports, not cwd/env.
+        mockBridge._setResponse("editor.status", {
+          open_scenes: ["res://main.tscn"],
+          project_path: dir,
+        });
+        const result = await mockServer.callTool("godot_connect_signal", {
+          from_path: "Button",
+          signal_name: "pressed",
+          to_path: "Player",
+          method: "_on_button_pressed",
+        });
+        expect(result.isError).toBeUndefined();
+        expect(result.content[0].text).toContain("Persisted to res://main.tscn");
+        const written = readFileSync(scene, "utf-8");
+        expect(written).toContain('signal="pressed"');
+        expect(written).toContain('method="_on_button_pressed"');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("godot_disconnect_signal", () => {
@@ -140,6 +176,35 @@ describe("signal-tools", () => {
         method: "m",
       });
       expect(result.isError).toBe(true);
+    });
+
+    it("removes the connection from the scene file using the editor-reported project_path", async () => {
+      const dir = mkdtempSync(path.join(tmpdir(), "godot-mcp-sig-"));
+      try {
+        const scene = path.join(dir, "main.tscn");
+        writeFileSync(
+          scene,
+          MINIMAL_SCENE +
+            '\n[connection signal="pressed" from="Button" to="Player" method="_on_button_pressed"]\n',
+          "utf-8"
+        );
+        mockBridge._setResponse("signal.disconnect", { success: true });
+        mockBridge._setResponse("editor.status", {
+          open_scenes: ["res://main.tscn"],
+          project_path: dir,
+        });
+        const result = await mockServer.callTool("godot_disconnect_signal", {
+          from_path: "Button",
+          signal_name: "pressed",
+          to_path: "Player",
+          method: "_on_button_pressed",
+        });
+        expect(result.isError).toBeUndefined();
+        expect(result.content[0].text).toContain("Removed from res://main.tscn");
+        expect(readFileSync(scene, "utf-8")).not.toContain("[connection");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 

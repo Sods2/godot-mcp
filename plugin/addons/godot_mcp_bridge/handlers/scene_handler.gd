@@ -2,6 +2,8 @@
 class_name SceneHandler
 extends RefCounted
 
+const _Coerce = preload("res://addons/godot_mcp_bridge/handlers/value_coerce.gd")
+
 func get_tree(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var root := editor_interface.get_edited_scene_root()
 	if root == null:
@@ -76,6 +78,21 @@ func add_node(editor_interface: EditorInterface, params: Dictionary) -> Dictiona
 
 	new_node.name = node_name
 
+	# Apply any initial properties. Values arrive as JSON, so coerce each to the
+	# property's real Variant type (Vector2, Color, …) before assigning. The node
+	# is not in the tree yet, so a direct set is fine and needs no undo entry.
+	var applied_properties: Array = []
+	var properties = params.get("properties", null)
+	if properties is Dictionary:
+		for key in properties:
+			var target_type := typeof(new_node.get(key))
+			for prop in new_node.get_property_list():
+				if prop["name"] == key:
+					target_type = int(prop["type"])
+					break
+			new_node.set(key, _Coerce.coerce(properties[key], target_type))
+			applied_properties.append(key)
+
 	var undo_redo := editor_interface.get_editor_undo_redo()
 	undo_redo.create_action("Add Node: " + node_name)
 	undo_redo.add_do_method(parent, "add_child", new_node)
@@ -84,7 +101,7 @@ func add_node(editor_interface: EditorInterface, params: Dictionary) -> Dictiona
 	undo_redo.commit_action()
 
 	var rel_path: String = str(root.get_path_to(new_node))
-	return {"success": true, "path": rel_path}
+	return {"success": true, "path": rel_path, "properties_applied": applied_properties}
 
 func remove_node(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var root := editor_interface.get_edited_scene_root()

@@ -339,7 +339,8 @@ func _handle_editor_status() -> Dictionary:
 	return {
 		"connected": true,
 		"open_scenes": open_scenes,
-		"is_playing": EditorInterface.is_playing_scene()
+		"is_playing": EditorInterface.is_playing_scene(),
+		"project_path": ProjectSettings.globalize_path("res://")
 	}
 
 func _send(peer: StreamPeerTCP, data: PackedByteArray) -> void:
