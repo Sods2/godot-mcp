@@ -1,0 +1,11 @@
+[gd_resource type="AnimationLibrary" format=3]
+
+[sub_resource type="Animation" id="Animation_quw0i"]
+
+[sub_resource type="Animation" id="Animation_k50bs"]
+
+[resource]
+_data = {
+&"jump": SubResource("Animation_quw0i"),
+&"wiggle": SubResource("Animation_k50bs")
+}

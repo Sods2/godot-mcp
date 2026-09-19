@@ -3,6 +3,7 @@ import {
   parseAttrs,
   serializeAttrs,
 } from "./section-attrs.js";
+import { parseProperties, splitSections } from "./section-io.js";
 
 const SCENE_HEADER_ATTRS: ReadonlySet<string> = new Set([
   "load_steps",
@@ -123,121 +124,6 @@ function randomHex(len: number): string {
     result += chars[Math.floor(Math.random() * 16)];
   }
   return result;
-}
-
-/**
- * Scan one line of a property value, continuing from the previous line's
- * string state. A value can span lines two ways: an open bracket (dict or
- * array) or an open quote — Godot writes multi-line strings literally, e.g.
- *
- *     text = "0/10
- *     Wood"
- *
- * Tracking only bracket depth silently swallows the second line, because it
- * has no `=` and is skipped as junk.
- */
-function scanValueLine(
-  s: string,
-  startInString: boolean
-): { depth: number; inString: boolean } {
-  let depth = 0;
-  let inString = startInString;
-  let escaped = false;
-  for (const ch of s) {
-    if (escaped) { escaped = false; continue; }
-    if (ch === "\\") { escaped = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (ch === "{" || ch === "[") depth++;
-    else if (ch === "}" || ch === "]") depth--;
-  }
-  return { depth, inString };
-}
-
-export function parseProperties(body: string): Record<string, string> {
-  const props: Record<string, string> = {};
-  if (!body) return props;
-
-  let currentKey: string | null = null;
-  let currentValue = "";
-  let depth = 0;
-  let inString = false;
-
-  for (const line of body.split("\n")) {
-    const trimmed = line.trim();
-
-    if (currentKey !== null) {
-      // Accumulating a value that spans lines (dict, array, or string)
-      currentValue += "\n" + line;
-      const scan = scanValueLine(line, inString);
-      depth += scan.depth;
-      inString = scan.inString;
-      if (depth <= 0 && !inString) {
-        props[currentKey] = currentValue;
-        currentKey = null;
-        currentValue = "";
-        depth = 0;
-      }
-      continue;
-    }
-
-    if (!trimmed || trimmed.startsWith(";")) continue;
-    const eqIndex = trimmed.indexOf("=");
-    if (eqIndex === -1) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    const value = trimmed.slice(eqIndex + 1).trim();
-
-    const scan = scanValueLine(value, false);
-    if (scan.depth > 0 || scan.inString) {
-      // Value continues on the following lines
-      currentKey = key;
-      currentValue = value;
-      depth = scan.depth;
-      inString = scan.inString;
-    } else {
-      props[key] = value;
-    }
-  }
-
-  // Handle an unterminated value (malformed .tscn)
-  if (currentKey !== null) {
-    props[currentKey] = currentValue;
-  }
-
-  return props;
-}
-
-function splitSections(
-  content: string
-): Array<{ header: string; body: string }> {
-  const sections: Array<{ header: string; body: string }> = [];
-  const lines = content.split("\n");
-  let currentHeader = "";
-  let currentBody: string[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith("[") && line.endsWith("]")) {
-      if (currentHeader) {
-        sections.push({
-          header: currentHeader,
-          body: currentBody.join("\n").trim(),
-        });
-      }
-      currentHeader = line;
-      currentBody = [];
-    } else if (currentHeader) {
-      currentBody.push(line);
-    }
-  }
-
-  if (currentHeader) {
-    sections.push({
-      header: currentHeader,
-      body: currentBody.join("\n").trim(),
-    });
-  }
-
-  return sections;
 }
 
 export class TscnParser {
@@ -667,6 +553,13 @@ export class TscnParser {
     const root = nodes.find((n) => n.parent === undefined);
     if (!root) return nodes;
 
+    // Every path that actually exists as a node in this file. A parent that is
+    // not in here is unreachable *within this file* — it lives in an inherited
+    // or instanced base scene, or the path is malformed. Such a node must be
+    // emitted in its source position, not deferred to the end, which would
+    // reorder a valid inherited scene.
+    const nodePaths = new Set(nodes.map((n) => this.buildNodePath(n, nodes)));
+
     const sorted: SceneNode[] = [root];
     let remaining = nodes.filter((n) => n !== root);
     const added = new Set<string>();
@@ -680,12 +573,14 @@ export class TscnParser {
       const deferred: SceneNode[] = [];
 
       for (const node of remaining) {
-        const parentAdded =
+        const parentPath =
           node.parent === "."
-            ? added.has(root.name)
-            : added.has(`${root.name}/${node.parent}`);
-
-        if (parentAdded) {
+            ? root.name
+            : `${root.name}/${node.parent}`;
+        // Emit when the parent is already placed, or when it can never be
+        // placed (unreachable) — deferring the latter is what moved it away
+        // from its source position.
+        if (added.has(parentPath) || !nodePaths.has(parentPath)) {
           sorted.push(node);
           added.add(this.buildNodePath(node, nodes));
           changed = true;
@@ -697,6 +592,7 @@ export class TscnParser {
       remaining = deferred;
     }
 
+    // Anything still left implies a parent cycle; keep it in source order.
     sorted.push(...remaining);
     return sorted;
   }

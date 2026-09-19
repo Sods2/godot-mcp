@@ -8,6 +8,7 @@ import {
   parseAttrs,
   serializeAttrs,
 } from "./section-attrs.js";
+import { parseProperties, splitSections } from "./section-io.js";
 
 const RESOURCE_HEADER_ATTRS: ReadonlySet<string> = new Set([
   "type",
@@ -39,55 +40,6 @@ export interface TresResource {
   extResources: ExtResource[];
   subResources: SubResource[];
   resource: Record<string, string>;
-}
-
-function parseProperties(body: string): Record<string, string> {
-  const props: Record<string, string> = {};
-  if (!body) return props;
-
-  for (const line of body.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith(";")) continue;
-    const eqIndex = trimmed.indexOf("=");
-    if (eqIndex === -1) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    const value = trimmed.slice(eqIndex + 1).trim();
-    props[key] = value;
-  }
-  return props;
-}
-
-function splitSections(
-  content: string
-): Array<{ header: string; body: string }> {
-  const sections: Array<{ header: string; body: string }> = [];
-  const lines = content.split("\n");
-  let currentHeader = "";
-  let currentBody: string[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith("[") && line.endsWith("]")) {
-      if (currentHeader) {
-        sections.push({
-          header: currentHeader,
-          body: currentBody.join("\n").trim(),
-        });
-      }
-      currentHeader = line;
-      currentBody = [];
-    } else if (currentHeader) {
-      currentBody.push(line);
-    }
-  }
-
-  if (currentHeader) {
-    sections.push({
-      header: currentHeader,
-      body: currentBody.join("\n").trim(),
-    });
-  }
-
-  return sections;
 }
 
 export class TresParser {

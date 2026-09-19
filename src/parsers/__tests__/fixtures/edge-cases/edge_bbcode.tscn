@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[node name="BBRoot" type="RichTextLabel" unique_id=1980192121]
+bbcode_enabled = true
+text = "hello
+[b]world[/b]
+[color=red]red[/color]
+bye"
