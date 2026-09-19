@@ -14,7 +14,16 @@
  */
 import { spawn } from "node:child_process";
 import net from "node:net";
-import { mkdtempSync, rmSync, cpSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  cpSync,
+  writeFileSync,
+  openSync,
+  closeSync,
+  readFileSync,
+  existsSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -159,16 +168,46 @@ async function run() {
     "utf-8"
   );
 
-  // 2. Launch the editor (inherits DISPLAY; wrap the whole command in xvfb-run
-  //    on a headless host). GODOT_EDITOR_ARGS lets CI force a software renderer,
-  //    e.g. "--rendering-driver opengl3".
   const extraArgs = (process.env.GODOT_EDITOR_ARGS || "").split(" ").filter(Boolean);
+  const logPath = path.join(proj, "editor.log");
+  const dumpEditorLog = () => {
+    if (!existsSync(logPath)) return;
+    const log = readFileSync(logPath, "utf-8").trim().split("\n");
+    console.error("\n----- editor log (last 60 lines) -----");
+    console.error(log.slice(-60).join("\n"));
+    console.error("--------------------------------------");
+  };
+
+  // 2a. Pre-import the project once, headlessly, so the interactive editor is
+  //     not still scanning/importing the filesystem when the bridge test drives
+  //     it — that blocks the main thread and times out bridge requests. On a
+  //     fresh CI project there is no .godot/ cache, so this is essential.
+  console.log("Pre-importing project (headless) ...");
+  await new Promise((res) => {
+    const imp = spawn(GODOT, ["--headless", "--path", proj, "--editor", "--quit-after", "1000"], {
+      stdio: "ignore",
+    });
+    const t = setTimeout(() => imp.kill(), 90000);
+    imp.on("exit", () => {
+      clearTimeout(t);
+      res();
+    });
+    imp.on("error", () => {
+      clearTimeout(t);
+      res();
+    });
+  });
+
+  // 2b. Launch the interactive editor (inherits DISPLAY; wrap in xvfb-run on a
+  //     headless host). Capture its output for diagnosis on failure.
   const editorArgs = ["--editor", "--path", proj, ...extraArgs];
   console.log(`Launching editor: ${GODOT} ${editorArgs.join(" ")}`);
+  const logFd = openSync(logPath, "w");
   const editor = spawn(GODOT, editorArgs, {
-    stdio: "ignore",
+    stdio: ["ignore", logFd, logFd],
     detached: false,
   });
+  closeSync(logFd);
   let editorExited = null;
   let editorSpawnError = null;
   editor.on("exit", (code) => {
@@ -315,6 +354,9 @@ async function run() {
     const save = await client.call("godot_save_scene");
     check("save_scene succeeds", /"success":\s*true/.test(save.text));
   } finally {
+    // Dump the editor log before cleanup deletes the project, so a CI failure
+    // shows what Godot was actually doing.
+    if (results.some((r) => !r.ok) || results.length === 0) dumpEditorLog();
     cleanup();
   }
 
