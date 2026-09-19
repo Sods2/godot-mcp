@@ -21,7 +21,11 @@ const FIXTURES = path.join(
   "fixtures"
 );
 
-const VERSIONS = readdirSync(FIXTURES).sort();
+// Only the per-version corpora; other fixture folders (e.g. edge-cases/) are
+// exercised by roundtrip.test.ts's corpus-wide invariants instead.
+const VERSIONS = readdirSync(FIXTURES)
+  .filter((name) => name.startsWith("godot-"))
+  .sort();
 
 /** 4.6 introduced per-node `unique_id` and stopped writing `load_steps`. */
 const STAMPS_NODE_IDS = new Set(["godot-4.6", "godot-4.7"]);

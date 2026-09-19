@@ -29,3 +29,24 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+  gdscript-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot (headless)
+        run: |
+          GODOT_VER=4.3-stable
+          curl -fL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VER}/Godot_v${GODOT_VER}_linux.x86_64.zip"
+          unzip -q godot.zip
+          sudo mv "Godot_v${GODOT_VER}_linux.x86_64" /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+          godot --version
+
+      - name: Run GDScript tests
+        run: npm run test:gd
+        env:
+          GODOT_PATH: /usr/local/bin/godot

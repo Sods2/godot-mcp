@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://edge_base.tscn" id="1_base"]
+
+[node name="Derived" instance=ExtResource("1_base")]
+
+[node name="AddedUnderInherited" type="Sprite2D" parent="InheritedChild"]
+
+[node name="Tail" type="Node2D" parent="."]
