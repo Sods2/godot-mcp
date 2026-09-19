@@ -227,6 +227,21 @@ async function run() {
     }
     check("editor_status reports connected", connected);
 
+    // A pristine editor (as in CI) opens no scene tab, so get_edited_scene_root()
+    // is null and every scene op fails. Open the scene explicitly and wait for
+    // the edited root to be live before asserting.
+    await client.call("godot_open_scene", { scene_path: "res://main.tscn" });
+    let sceneReady = false;
+    for (let i = 0; i < 20; i++) {
+      await sleep(1000);
+      const t = await client.call("godot_get_scene_tree");
+      if (/"name":\s*"Main"/.test(t.text)) {
+        sceneReady = true;
+        break;
+      }
+    }
+    check("scene opens and tree is available", sceneReady);
+
     // 4. Drive representative handlers and assert the editor actually changed.
     const tree0 = await client.call("godot_get_scene_tree");
     check("scene tree has root Main", /"name":\s*"Main"/.test(tree0.text));
