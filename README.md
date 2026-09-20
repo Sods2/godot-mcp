@@ -123,7 +123,7 @@ The plugin is required for tools that interact with the running Godot editor (li
 1. Copy `plugin/addons/godot_mcp_bridge/` into your Godot project's `addons/` directory
 2. Open the project in the Godot editor
 3. Go to **Project > Project Settings > Plugins**
-4. Enable **Claude Bridge**
+4. Enable **MCP Bridge**
 
 To screenshot the *running game*, the plugin registers an autoload
 (`ClaudeBridgeGameCapture`) in your project. The editor cannot read the game's
