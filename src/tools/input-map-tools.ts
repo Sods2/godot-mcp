@@ -23,7 +23,7 @@ export const inputEventSchema = z
     alt: z.boolean().optional(),
     meta: z.boolean().optional(),
     button_index: z.number().int().optional().describe("Mouse/joypad button index (mouse: 1=left, 2=right, 3=middle)"),
-    axis: z.number().int().optional().describe("Joypad motion axis"),
+    axis: z.number().int().optional().describe("Joypad motion axis (required for joypad_motion)"),
     axis_value: z.number().optional().describe("Joypad motion axis value (-1 or 1)"),
     device: z.number().int().optional().describe("Joypad device (-1 = all)"),
   })

@@ -55,7 +55,7 @@ static func event_to_dict(ev: InputEvent) -> Dictionary:
 		return {"type": "key", "keycode": ev.keycode, "physical_keycode": ev.physical_keycode,
 			"key_label": ev.key_label, "unicode": ev.unicode,
 			"shift": ev.shift_pressed, "ctrl": ev.ctrl_pressed, "alt": ev.alt_pressed, "meta": ev.meta_pressed,
-			"text": ev.as_text()}
+			"text": _key_text(ev)}
 	if ev is InputEventMouseButton:
 		return {"type": "mouse_button", "button_index": ev.button_index, "text": ev.as_text()}
 	if ev is InputEventJoypadButton:
@@ -63,6 +63,20 @@ static func event_to_dict(ev: InputEvent) -> Dictionary:
 	if ev is InputEventJoypadMotion:
 		return {"type": "joypad_motion", "axis": ev.axis, "axis_value": ev.axis_value, "device": ev.device, "text": ev.as_text()}
 	return {"type": ev.get_class() if ev else "null", "text": ev.as_text() if ev else ""}
+
+static func _key_text(ev: InputEventKey) -> String:
+	var txt: String = ev.as_text()
+	if ev.keycode == 0 and ev.physical_keycode != 0 and not txt.ends_with("Physical"):
+		txt += " - Physical"
+	return txt
+
+# Identity used for duplicate detection (ignores the human-readable text).
+static func _event_sig(ev: InputEvent) -> String:
+	var d := event_to_dict(ev)
+	d.erase("text")
+	if ev is InputEventJoypadMotion:
+		d["axis_value"] = signf(ev.axis_value)  # direction is what matters in the Input Map
+	return var_to_str(d)
 
 func _parse_events(raw) -> Dictionary:
 	var out: Array = []
@@ -74,6 +88,9 @@ func _parse_events(raw) -> Dictionary:
 		var e = raw[i]
 		if not (e is Dictionary):
 			return {"error": "events[%d] must be an object" % i}
+		var et: String = str(e.get("type", "key")).to_lower()
+		if (et == "joypad_motion" or et == "joy_axis") and not e.has("axis"):
+			return {"error": "events[%d]: joypad_motion requires axis" % i}
 		var ev := event_from_dict(e)
 		if ev == null:
 			return {"error": "events[%d] is invalid (supported types: key, mouse_button, joypad_button, joypad_motion; key needs keycode or physical_keycode)" % i}
@@ -132,20 +149,31 @@ func add_action(params: Dictionary) -> Dictionary:
 		var cur = ProjectSettings.get_setting(key)
 		entry = (cur as Dictionary).duplicate() if cur is Dictionary else {"deadzone": DEFAULT_DEADZONE, "events": []}
 		var evs: Array = (entry.get("events", []) as Array).duplicate()
-		for ev in parsed["events"]:
-			evs.append(ev)
+		evs.append_array(parsed["events"])
 		entry["events"] = evs
 		if params.has("deadzone"):
 			entry["deadzone"] = float(params["deadzone"])
 	else:
 		entry = {"deadzone": float(params.get("deadzone", DEFAULT_DEADZONE)), "events": parsed["events"]}
+	# Drop duplicate events (already on the action, or repeated in this request).
+	var seen := {}
+	var unique: Array = []
+	var skipped := 0
+	for ev in entry["events"]:
+		var sig := _event_sig(ev)
+		if seen.has(sig):
+			skipped += 1
+			continue
+		seen[sig] = true
+		unique.append(ev)
+	entry["events"] = unique
 	ProjectSettings.set_setting(key, entry)
 	var err := _save()
 	if err != "":
 		return {"error": err}
 	_sync_input_map(action, entry)
 	return {"success": true, "action": action, "created": not existed,
-		"deadzone": entry["deadzone"], "event_count": (entry["events"] as Array).size()}
+		"deadzone": entry["deadzone"], "event_count": (entry["events"] as Array).size(), "skipped_duplicates": skipped}
 
 func add_event(params: Dictionary) -> Dictionary:
 	var action: String = str(params.get("action", ""))
