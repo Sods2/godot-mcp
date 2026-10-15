@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import path from "node:path";
 import { TscnParser, type TscnScene } from "../parsers/tscn-parser.js";
 import type { BridgeConnection } from "../connection.js";
-import type { ImportAssetResponse, ReadResourceResponse, WriteResourceResponse } from "../types/bridge-responses.js";
+import type { ImportAssetResponse, ValidateScriptResponse, ReadResourceResponse, WriteResourceResponse } from "../types/bridge-responses.js";
 import { expandPath, resolveProjectPath } from "../project-utils.js";
 import { cleanOutput } from "../output-utils.js";
 
@@ -266,7 +266,7 @@ export function registerFileTools(
 
   server.tool(
     "godot_validate_script",
-    "Validate a GDScript file using Godot's --check-only flag",
+    "Validate a GDScript file. Uses the running editor via the bridge when connected (sees autoloads and class_name globals, no project lock); otherwise falls back to headless --check-only, which needs the editor closed and reports autoload names as unknown",
     {
       project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       script_path: z
@@ -278,6 +278,37 @@ export function registerFileTools(
         .describe("Include warnings in output (passes -W flag to Godot)"),
     },
     async ({ project_path, script_path, include_warnings }) => {
+      // Preferred path: validate inside the running editor via the bridge.
+      // The editor knows autoload names and class_name globals and holds the
+      // project lock, so --check-only would be wrong (autoloads) or blocked.
+      let fallbackNote = "";
+      if (bridge.connected) {
+        try {
+          const res = await bridge.send<ValidateScriptResponse>("script.validate", { path: script_path });
+          if (res && typeof res.valid === "boolean") {
+            const details = (res.errors ?? []).filter((m) => m && m.trim()).join("\n");
+            if (res.valid) {
+              return { content: [{ type: "text", text: `Script is valid (checked in the running editor).\n${details}`.trim() }] };
+            }
+            const extra = res.details_captured
+              ? ""
+              : "\n(Detailed parse errors need Godot 4.5+; see the editor's Output panel.)";
+            return {
+              content: [{ type: "text", text: `Script has errors (checked in the running editor): ${res.error || "parse failed"}\n${details}${extra}`.trim() }],
+              isError: true,
+            };
+          }
+          if (res && res.error) {
+            return { content: [{ type: "text", text: `Error: ${res.error}` }], isError: true };
+          }
+          fallbackNote = "Note: editor bridge returned an unexpected response; fell back to headless --check-only.";
+        } catch (e) {
+          const msg = (e as Error).message ?? String(e);
+          fallbackNote = /Unknown method/i.test(msg)
+            ? "Note: the Godot addon is older than this server (no script.validate); fell back to headless --check-only. Update the godot_mcp_bridge addon for editor-side validation."
+            : `Note: editor bridge validation failed (${msg}); fell back to headless --check-only.`;
+        }
+      }
       try {
         const projectDir = resolveProjectPath(project_path);
         const gp = await godotPath();
@@ -300,7 +331,7 @@ export function registerFileTools(
           { timeout: 30000 }
         );
 
-        const output = cleanOutput((stdout + "\n" + stderr).trim());
+        const output = [fallbackNote, cleanOutput((stdout + "\n" + stderr).trim())].filter(Boolean).join("\n");
 
         // Even on exit code 0, Godot may have printed error indicators (e.g. corrupt
         // project scene causes a crash before script parsing actually ran).
@@ -328,7 +359,11 @@ export function registerFileTools(
       } catch (e: unknown) {
         const err = e as Error & { stdout?: string; stderr?: string };
         const output = cleanOutput(((err.stdout || "") + "\n" + (err.stderr || "")).trim());
-        const hint = "\n\nNote: godot_validate_script uses --check-only which requires an exclusive project lock. If the Godot editor is already open with this project, close it first before validating.";
+        let hint = "\n\nNote: headless validation (--check-only) needs an exclusive project lock and does not load autoloads. Open the project in the Godot editor with the godot_mcp_bridge addon enabled for accurate validation.";
+        if (/Identifier not found/i.test(output)) {
+          hint += " \"Identifier not found\" for an autoload name (e.g. a singleton from project.godot) is a known false positive of headless mode.";
+        }
+        if (fallbackNote) hint = `\n\n${fallbackNote}` + hint;
         return {
           content: [
             {

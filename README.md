@@ -190,7 +190,7 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `godot_validate_script` | Validate a GDScript file using `--check-only` | `script_path`, `include_warnings` |
+| `godot_validate_script` | Validate a GDScript file. With the editor bridge connected it compiles the script inside the editor (autoloads and `class_name` globals resolve, no project lock; detailed errors need Godot 4.5+). Without the bridge (or with an older addon) it falls back to headless `--check-only`, which needs the editor closed and reports autoload names as "Identifier not found" | `script_path`, `include_warnings` |
 | `godot_get_current_script` | Get the open script, source, and cursor position | — |
 | `godot_get_open_scripts` | List all open scripts | — |
 | `godot_get_selected_code` | Get selected text in the script editor | — |

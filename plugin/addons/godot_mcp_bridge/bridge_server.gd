@@ -243,6 +243,8 @@ func _handle_message(msg: Dictionary) -> void:
 			result = _script_handler.detach_script(editor_interface, params)
 		"script.get_for_node":
 			result = _script_handler.get_script_for_node(editor_interface, params)
+		"script.validate":
+			result = _script_handler.validate_script(editor_interface, params)
 		"animation.list":
 			result = _animation_handler.list_animations(editor_interface, params)
 		"animation.get":
