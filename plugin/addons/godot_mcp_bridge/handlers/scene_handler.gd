@@ -160,6 +160,31 @@ func open_scene(editor_interface: EditorInterface, params: Dictionary) -> Dictio
 		return {"error": "Failed to open scene: " + scene_path}
 	return {"success": true, "open_scenes": Array(open_scenes)}
 
+func close_scene(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var scene_path: String = params.get("path", "")
+	if scene_path == "":
+		return {"error": "path is required"}
+	var open_scenes: PackedStringArray = editor_interface.get_open_scenes()
+	if scene_path not in open_scenes:
+		return {"error": "Scene is not open in the editor: " + scene_path, "open_scenes": Array(open_scenes)}
+	# Remember the active tab so we can restore it if it isn't the one being closed.
+	var previous: String = ""
+	var cur_root: Node = editor_interface.get_edited_scene_root()
+	if cur_root != null:
+		previous = cur_root.scene_file_path
+	# EditorInterface.close_scene() closes the *active* tab and discards unsaved changes.
+	if previous != scene_path:
+		editor_interface.open_scene_from_path(scene_path)
+	var err: int = editor_interface.close_scene()
+	if err != OK:
+		return {"error": "close_scene failed (error %d) for %s" % [err, scene_path]}
+	if previous != "" and previous != scene_path and previous in editor_interface.get_open_scenes():
+		editor_interface.open_scene_from_path(previous)
+	var remaining: PackedStringArray = editor_interface.get_open_scenes()
+	if scene_path in remaining:
+		return {"error": "Scene still open after close: " + scene_path, "open_scenes": Array(remaining)}
+	return {"success": true, "closed": scene_path, "open_scenes": Array(remaining), "unsaved_changes_discarded": true}
+
 func save_scene(editor_interface: EditorInterface) -> Dictionary:
 	editor_interface.save_scene()
 	return {"success": true}

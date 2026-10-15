@@ -59,6 +59,17 @@ export class BridgeConnection {
     });
   }
 
+  /** Skip any pending backoff and try to reconnect immediately (e.g. after an editor restart). */
+  reconnectNow(): void {
+    if (this.closing || this.connected) return;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    this.retryMs = INITIAL_RETRY_MS;
+    if (!this.socket) this.attempt();
+  }
+
   close(): void {
     this.closing = true;
     if (this.retryTimer) {

@@ -195,6 +195,13 @@ func _handle_message(msg: Dictionary) -> void:
 			result = _scene_handler.reparent_node(editor_interface, params)
 		"scene.open":
 			result = _scene_handler.open_scene(editor_interface, params)
+		"scene.close":
+			result = _scene_handler.close_scene(editor_interface, params)
+		"editor.reload_project":
+			var save_first: bool = bool(params.get("save", true))
+			# Reply first, then restart once the response has gone out.
+			get_tree().create_timer(0.5).timeout.connect(func(): EditorInterface.restart_editor(save_first))
+			result = {"success": true, "restarting": true, "saved": save_first}
 		"scene.save":
 			result = _scene_handler.save_scene(editor_interface)
 		"inspector.get_properties":

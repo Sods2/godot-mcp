@@ -37,6 +37,8 @@ const EXPECTED_TOOL_NAMES = [
   "godot_get_selected_nodes",
   "godot_get_node_properties",
   "godot_open_scene",
+  "godot_close_scene",
+  "godot_reload_project",
   "godot_reparent_node",
   "godot_rename_node",
   "godot_duplicate_node",
@@ -194,7 +196,7 @@ describe("tool-registration", () => {
     expect(INLINE_TOOL_NAMES).toContain("godot_add_autoload");
   });
 
-  it("total tool count (modular + inline) equals 77", () => {
-    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(77);
+  it("total tool count (modular + inline) equals 79", () => {
+    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(79);
   });
 });

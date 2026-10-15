@@ -5,7 +5,7 @@
 
 A Model Context Protocol (MCP) server that gives AI assistants full integration with the Godot game engine IDE. Interact with live editor state, parse and modify scene files, run projects, capture screenshots, debug with breakpoints, profile performance, and more.
 
-**77 tools** across 15 categories, covering the full Godot development workflow.
+**79 tools** across 15 categories, covering the full Godot development workflow.
 
 ## Features
 
@@ -159,6 +159,8 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | `godot_launch_editor` | Launch the Godot editor for a project | `project_path` |
 | `godot_editor_status` | Get editor connection status, open scenes, playing state | — |
 | `godot_open_scene` | Open a scene file in the editor | `scene_path` |
+| `godot_close_scene` | Close an open scene tab (discards its unsaved changes) | `scene_path` |
+| `godot_reload_project` | Restart the editor to reload the project; waits for the bridge to reconnect | `save`, `wait_for_reconnect`, `timeout_sec` |
 
 ### Scene Editing (file-based, no editor required)
 
