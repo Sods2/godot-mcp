@@ -77,6 +77,7 @@ const EXPECTED_TOOL_NAMES = [
   "godot_get_profiler_data",
   // Scene tools
   "godot_add_node",
+  "godot_instance_scene",
   "godot_remove_node",
   "godot_set_property",
   "godot_save_scene",
@@ -95,6 +96,7 @@ const EXPECTED_TOOL_NAMES = [
   "godot_import_asset",
   "godot_read_resource",
   "godot_write_resource",
+  "godot_create_resource",
   // Run tools
   "godot_run_scene",
   "godot_stop_scene",
@@ -194,7 +196,7 @@ describe("tool-registration", () => {
     expect(INLINE_TOOL_NAMES).toContain("godot_add_autoload");
   });
 
-  it("total tool count (modular + inline) equals 77", () => {
-    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(77);
+  it("total tool count (modular + inline) equals 79", () => {
+    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(79);
   });
 });

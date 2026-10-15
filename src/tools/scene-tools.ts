@@ -93,6 +93,37 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
   );
 
   server.tool(
+    "godot_instance_scene",
+    "Instance a PackedScene as a child of a node in the currently edited scene (requires editor plugin). Saves as instance=ExtResource rather than inlining children.",
+    {
+      scene_path: z.string().describe("Path to the PackedScene to instance (e.g. res://level2.tscn)"),
+      parent_path: z.string().optional().describe("Parent node path in the edited scene (default: root '.')"),
+      node_name: z.string().optional().describe("Name for the instance root (default: packed scene root name)"),
+    },
+    async ({ scene_path, parent_path, node_name }) => {
+      if (!bridge.connected) {
+        return { ...textResult(NOT_CONNECTED_MSG), isError: true };
+      }
+      try {
+        const result = await bridge.send<Record<string, unknown>>("scene.instance_scene", {
+          scene_path,
+          parent: parent_path ?? ".",
+          name: node_name ?? "",
+        });
+        if (result && typeof result === "object" && "error" in result) {
+          return {
+            content: [{ type: "text" as const, text: `Error: ${String(result.error)}` }],
+            isError: true,
+          };
+        }
+        return textResult(JSON.stringify(result, null, 2));
+      } catch (e) {
+        return errorResult(e);
+      }
+    }
+  );
+
+  server.tool(
     "godot_save_scene",
     "Save the current scene in the editor",
     {},

@@ -124,3 +124,90 @@ func write_resource(editor_interface: EditorInterface, params: Dictionary) -> Di
 	if err != OK:
 		return {"error": "Failed to save resource: " + str(err)}
 	return {"success": true}
+
+## Create a new Resource of the given type and save it to path (.tres/.res).
+## Unlike write_resource, this does not require the file to already exist.
+func create_resource(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var res_path: String = str(params.get("path", ""))
+	var type_name: String = str(params.get("type", ""))
+	var properties = params.get("properties", {})
+	if res_path == "":
+		return {"error": "path is required"}
+	if type_name == "":
+		return {"error": "type is required"}
+
+	var res: Resource = _instantiate_resource_type(type_name)
+	if res == null:
+		return {"error": "Unknown or non-Resource type: " + type_name}
+
+	var applied: Array = []
+	var errors: Array = []
+	if properties is Dictionary:
+		var type_map: Dictionary = {}
+		for prop in res.get_property_list():
+			type_map[prop["name"]] = int(prop["type"])
+		for key in properties:
+			var target_type: int = int(type_map.get(key, typeof(res.get(key))))
+			var coerced = _Coerce.coerce(properties[key], target_type)
+			res.set(key, coerced)
+			var actual = res.get(key)
+			if _Coerce.values_match(actual, coerced):
+				applied.append(key)
+			else:
+				errors.append(
+					"Property '%s' did not accept value (requested %s, holds %s)"
+					% [str(key), str(coerced), str(actual)]
+				)
+
+	var abs_path: String = ProjectSettings.globalize_path(res_path)
+	var base_dir: String = abs_path.get_base_dir()
+	if base_dir != "":
+		DirAccess.make_dir_recursive_absolute(base_dir)
+
+	var err: Error = ResourceSaver.save(res, res_path)
+	if err != OK:
+		return {
+			"success": false,
+			"error": "Failed to save resource: " + str(err),
+			"properties_applied": applied,
+			"errors": errors,
+		}
+
+	var fs: EditorFileSystem = editor_interface.get_resource_filesystem()
+	if fs != null:
+		fs.update_file(res_path)
+
+	var result: Dictionary = {
+		"success": true,
+		"path": res_path,
+		"type": res.get_class(),
+		"properties_applied": applied,
+	}
+	if errors.size() > 0:
+		result["errors"] = errors
+	return result
+
+
+func _instantiate_resource_type(type_name: String) -> Resource:
+	if ClassDB.class_exists(type_name):
+		if not ClassDB.is_parent_class(type_name, "Resource"):
+			return null
+		var obj = ClassDB.instantiate(type_name)
+		if obj is Resource:
+			return obj as Resource
+		return null
+	# Project-registered global classes (class_name Foo extends Resource).
+	for info in ProjectSettings.get_global_class_list():
+		if str(info.get("class", "")) != type_name:
+			continue
+		var script_path: String = str(info.get("path", ""))
+		if script_path == "":
+			continue
+		var script = load(script_path)
+		if script == null:
+			continue
+		var obj2 = script.new()
+		if obj2 is Resource:
+			return obj2 as Resource
+	return null
+

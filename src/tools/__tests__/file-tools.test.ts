@@ -345,7 +345,7 @@ describe("file-tools", () => {
     });
   });
 
-  describe("bridge-based tools (godot_import_asset, godot_read_resource, godot_write_resource)", () => {
+  describe("bridge-based tools (godot_import_asset, godot_read_resource, godot_write_resource, godot_create_resource)", () => {
     beforeEach(() => {
       mockBridge._setConnected(true);
     });
@@ -380,6 +380,35 @@ describe("file-tools", () => {
       expect(mockBridge._getCalls()[0].method).toBe("resource.write");
       const params = mockBridge._getCalls()[0].params as Record<string, unknown>;
       expect(params.path).toBe("res://mat.tres");
+    });
+
+    it("godot_create_resource sends resource.create with path, type, and properties", async () => {
+      mockBridge._setResponse("resource.create", {
+        success: true,
+        path: "res://new_style.tres",
+        type: "StyleBoxFlat",
+        properties_applied: ["bg_color"],
+      });
+      const result = await mockServer.callTool("godot_create_resource", {
+        path: "res://new_style.tres",
+        type: "StyleBoxFlat",
+        properties: { bg_color: { r: 1, g: 0, b: 0, a: 1 } },
+      });
+      expect(result.isError).toBeUndefined();
+      expect(mockBridge._getCalls()[0].method).toBe("resource.create");
+      const params = mockBridge._getCalls()[0].params as Record<string, unknown>;
+      expect(params.path).toBe("res://new_style.tres");
+      expect(params.type).toBe("StyleBoxFlat");
+      expect(params.properties).toEqual({ bg_color: { r: 1, g: 0, b: 0, a: 1 } });
+    });
+
+    it("godot_create_resource marks a bridge error result as isError", async () => {
+      mockBridge._setResponse("resource.create", { error: "Unknown or non-Resource type: Nope" });
+      const result = await mockServer.callTool("godot_create_resource", {
+        path: "res://x.tres",
+        type: "Nope",
+      });
+      expect(result.isError).toBe(true);
     });
 
     it("godot_import_asset returns error when bridge throws", async () => {

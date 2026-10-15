@@ -237,6 +237,23 @@ export interface WriteResourceResponse {
   success: true;
 }
 
+export interface CreateResourceResponse {
+  success: true;
+  path: string;
+  type: string;
+  properties_applied?: string[];
+  errors?: string[];
+  error?: string;
+}
+
+export interface InstanceSceneResponse {
+  success: true;
+  path: string;
+  name: string;
+  scene_path: string;
+  scene_file_path?: string;
+}
+
 // Debug
 export interface SetBreakpointResponse { success: true; file: string; line: number; }
 export interface RemoveBreakpointResponse { success: true; }

@@ -189,6 +189,8 @@ func _handle_message(msg: Dictionary) -> void:
 			result = _scene_handler.get_selected(editor_interface)
 		"scene.add_node":
 			result = _scene_handler.add_node(editor_interface, params)
+		"scene.instance_scene":
+			result = _scene_handler.instance_scene(editor_interface, params)
 		"scene.remove_node":
 			result = _scene_handler.remove_node(editor_interface, params)
 		"scene.reparent_node":
@@ -267,6 +269,8 @@ func _handle_message(msg: Dictionary) -> void:
 			result = _inspector_handler.read_resource(editor_interface, params)
 		"resource.write":
 			result = _inspector_handler.write_resource(editor_interface, params)
+		"resource.create":
+			result = _inspector_handler.create_resource(editor_interface, params)
 		"debug.set_breakpoint":
 			if _debug_handler != null:
 				result = _debug_handler.set_breakpoint(editor_interface, params)
