@@ -579,13 +579,18 @@ export function registerFileTools(
         .record(z.string(), z.unknown())
         .optional()
         .describe("Initial properties to set (Color as {r,g,b,a}, etc.)"),
+      overwrite: z
+        .boolean()
+        .optional()
+        .describe("Replace the file if it already exists (default false: refuse)"),
     },
-    async ({ path: resPath, type, properties }) => {
+    async ({ path: resPath, type, properties, overwrite }) => {
       try {
         const result = await bridge.send<CreateResourceResponse>("resource.create", {
           path: resPath,
           type,
           properties: properties ?? {},
+          ...(overwrite ? { overwrite: true } : {}),
         });
         if (result && typeof result === "object" && "error" in result) {
           return {

@@ -135,6 +135,12 @@ func create_resource(editor_interface: EditorInterface, params: Dictionary) -> D
 		return {"error": "path is required"}
 	if type_name == "":
 		return {"error": "type is required"}
+	var ext: String = res_path.get_extension().to_lower()
+	if ext != "tres" and ext != "res":
+		return {"error": "Resource path must end in .tres or .res (got '.%s'): %s" % [ext, res_path]}
+	var existed: bool = FileAccess.file_exists(res_path)
+	if existed and not bool(params.get("overwrite", false)):
+		return {"error": "Resource already exists: %s (pass overwrite: true to replace)" % res_path}
 
 	var res: Resource = _instantiate_resource_type(type_name)
 	if res == null:
@@ -168,7 +174,7 @@ func create_resource(editor_interface: EditorInterface, params: Dictionary) -> D
 	if err != OK:
 		return {
 			"success": false,
-			"error": "Failed to save resource: " + str(err),
+			"error": "Failed to save resource: %s (%s)" % [error_string(err), str(err)],
 			"properties_applied": applied,
 			"errors": errors,
 		}

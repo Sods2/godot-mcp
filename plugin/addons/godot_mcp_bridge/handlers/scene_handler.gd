@@ -264,6 +264,17 @@ func instance_scene(editor_interface: EditorInterface, params: Dictionary) -> Di
 	if not ResourceLoader.exists(scene_path) and not FileAccess.file_exists(scene_path):
 		return {"error": "Scene file not found: " + scene_path}
 
+	# Refuse self / circular instancing (a scene that would contain itself).
+	var target_path: String = root.scene_file_path
+	if target_path != "":
+		var src_norm: String = _normalize_res_path(scene_path)
+		var dst_norm: String = _normalize_res_path(target_path)
+		if src_norm == dst_norm:
+			return {"error": "Cannot instance a scene into itself: " + scene_path}
+		var chain: Array = _find_dependency_chain(src_norm, dst_norm, {})
+		if not chain.is_empty():
+			return {"error": "Circular instance refused: %s already contains %s (via %s)" % [scene_path, target_path, " -> ".join(chain)]}
+
 	var loaded: Resource = ResourceLoader.load(scene_path)
 	if loaded == null or not (loaded is PackedScene):
 		return {"error": "Failed to load PackedScene: " + scene_path}
@@ -297,3 +308,36 @@ func instance_scene(editor_interface: EditorInterface, params: Dictionary) -> Di
 		"scene_file_path": instance.scene_file_path,
 	}
 
+
+
+func _normalize_res_path(p: String) -> String:
+	if p.begins_with("uid://"):
+		var id: int = ResourceUID.text_to_id(p)
+		if id != ResourceUID.INVALID_ID and ResourceUID.has_id(id):
+			return ResourceUID.get_id_path(id)
+	if not p.begins_with("res://"):
+		p = ProjectSettings.localize_path(p)
+	return p.simplify_path()
+
+## Depth-first search of scene dependencies. Returns the path chain from
+## `from_path` to `target` if `from_path` (transitively) depends on it.
+func _find_dependency_chain(from_path: String, target: String, visited: Dictionary) -> Array:
+	if visited.has(from_path):
+		return []
+	visited[from_path] = true
+	for dep in ResourceLoader.get_dependencies(from_path):
+		var dep_path: String = str(dep)
+		if dep_path.contains("::"):
+			var parts: PackedStringArray = dep_path.split("::")
+			dep_path = parts[parts.size() - 1]
+			if dep_path == "":
+				dep_path = parts[0]
+		dep_path = _normalize_res_path(dep_path)
+		if not (dep_path.ends_with(".tscn") or dep_path.ends_with(".scn")):
+			continue
+		if dep_path == target:
+			return [from_path, dep_path]
+		var sub: Array = _find_dependency_chain(dep_path, target, visited)
+		if not sub.is_empty():
+			return [from_path] + sub
+	return []
