@@ -66,6 +66,14 @@ func set_property(editor_interface: EditorInterface, params: Dictionary) -> Dict
 			target_hint_string = str(prop.get("hint_string", ""))
 			break
 	var coerced = _Coerce.coerce(prop_value, target_type, target_hint, target_hint_string)
+	if target_type == TYPE_OBJECT and _Coerce.last_error != "":
+		return {
+			"success": false,
+			"property": prop_name,
+			"error": _Coerce.last_error,
+			"requested": str(prop_value),
+			"value": str(old_value)
+		}
 	var resolved := _Coerce.resolve_for_assignment(coerced, node, target_type, root)
 	if not resolved["ok"]:
 		return {

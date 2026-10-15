@@ -10,6 +10,11 @@ extends RefCounted
 # hint / hint_string come from get_property_list() and disambiguate TYPE_OBJECT:
 # RESOURCE_TYPE loads res:// paths; NODE_TYPE turns a path string into NodePath
 # (call resolve_for_assignment afterwards to get the live Node).
+# Set by coerce() when a value could not be converted (e.g. unknown inline
+# sub-resource type). Callers read it right after coerce() to report honestly.
+static var last_error: String = ""
+
+
 static func coerce(value, type: int, hint: int = PROPERTY_HINT_NONE, hint_string: String = ""):
 	match type:
 		TYPE_BOOL:
@@ -25,6 +30,7 @@ static func coerce(value, type: int, hint: int = PROPERTY_HINT_NONE, hint_string
 		TYPE_NODE_PATH:
 			return _node_path(value)
 		TYPE_OBJECT:
+			last_error = ""
 			return _object(value, hint, hint_string)
 		TYPE_VECTOR2:
 			return _vec2(value)
@@ -95,10 +101,12 @@ static func _object(value, hint: int, _hint_string: String):
 		var s: String = value
 		# Resource / Script from a project path.
 		if s.begins_with("res://") or s.begins_with("user://"):
-			if ResourceLoader.exists(s):
-				return ResourceLoader.load(s)
-			# Still try load — exists() can be false for brand-new files.
-			return ResourceLoader.load(s)
+			# Try load even if exists() is false — it can be for brand-new files.
+			var loaded = ResourceLoader.load(s)
+			if loaded == null:
+				last_error = "Could not load resource: %s" % s
+				return value
+			return loaded
 		# Node-typed export: keep as NodePath so the caller can resolve against
 		# the property owner (paths are relative to that node, not the scene root).
 		if hint == PROPERTY_HINT_NODE_TYPE:
@@ -107,7 +115,57 @@ static func _object(value, hint: int, _hint_string: String):
 		if hint == PROPERTY_HINT_RESOURCE_TYPE and s.contains("://"):
 			return ResourceLoader.load(s)
 		return value
+	# Inline sub-resource: {"type":"CircleShape2D","radius":20,...}
+	if value is Dictionary and value.has("type"):
+		return _sub_resource(value, hint, _hint_string)
 	return value
+
+
+# Build an unsaved Resource from a dict; Godot packs it as a [sub_resource]
+# when the owning scene is saved. On failure returns the original dict (so the
+# assignment no-ops instead of clearing the property) and sets last_error.
+static func _sub_resource(d: Dictionary, hint: int, hint_string: String):
+	var type_name := str(d["type"])
+	if not ClassDB.class_exists(type_name) or not ClassDB.can_instantiate(type_name):
+		last_error = "Unknown or non-instantiable resource type: %s" % type_name
+		return d
+	if not ClassDB.is_parent_class(type_name, "Resource"):
+		last_error = "%s is not a Resource type" % type_name
+		return d
+	if hint == PROPERTY_HINT_RESOURCE_TYPE and hint_string != "":
+		var ok := false
+		for allowed in hint_string.split(","):
+			allowed = allowed.strip_edges()
+			if allowed == type_name or (ClassDB.class_exists(allowed) and ClassDB.is_parent_class(type_name, allowed)):
+				ok = true
+				break
+		if not ok:
+			last_error = "%s is not compatible with expected type %s" % [type_name, hint_string]
+			return d
+	var res: Resource = ClassDB.instantiate(type_name)
+	var plist := {}
+	for prop in res.get_property_list():
+		plist[str(prop["name"])] = prop
+	var errs: Array = []
+	for key in d:
+		if key == "type":
+			continue
+		if not plist.has(str(key)):
+			errs.append("%s.%s: no such property" % [type_name, key])
+			continue
+		var pr: Dictionary = plist[str(key)]
+		var v = coerce(d[key], int(pr["type"]), int(pr["hint"]), str(pr.get("hint_string", "")))
+		if last_error != "":
+			errs.append("%s.%s: %s" % [type_name, key, last_error])
+			last_error = ""
+			continue
+		res.set(key, v)
+		if not values_match(res.get(key), v):
+			errs.append("%s.%s: property did not accept the value" % [type_name, key])
+	if errs.size() > 0:
+		last_error = "; ".join(errs)
+		return d
+	return res
 
 
 static func _num(value, key: String, idx: int, def: float) -> float:

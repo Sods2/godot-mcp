@@ -129,6 +129,9 @@ func add_node(editor_interface: EditorInterface, params: Dictionary) -> Dictiona
 			var target_type2: int = type_map.get(key, typeof(new_node.get(key)))
 			var h2: Dictionary = hint_map.get(key, {"hint": PROPERTY_HINT_NONE, "hint_string": ""})
 			var coerced2 = _Coerce.coerce(properties[key], target_type2, int(h2["hint"]), str(h2["hint_string"]))
+			if target_type2 == TYPE_OBJECT and _Coerce.last_error != "":
+				property_errors.append("%s: %s" % [key, _Coerce.last_error])
+				continue
 			if coerced2 is NodePath and target_type2 == TYPE_OBJECT:
 				pending_node_props[key] = coerced2
 				continue
