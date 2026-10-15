@@ -10,6 +10,7 @@ import type { ImportAssetResponse, ReadResourceResponse, WriteResourceResponse }
 import { expandPath, resolveProjectPath } from "../project-utils.js";
 import { cleanOutput } from "../output-utils.js";
 import { resolveScriptRoot } from "../script-class-resolver.js";
+import { isNativeNodeClass } from "../native-node-classes.js";
 
 const execFileAsync = promisify(execFile);
 const parser = new TscnParser();
@@ -90,14 +91,23 @@ export function registerFileTools(
       try {
         const projectDir = resolveProjectPath(project_path);
         const filePath = resolveResPath(projectDir, scene_path);
-        const dirPath = path.dirname(filePath);
-        await mkdir(dirPath, { recursive: true });
 
         const defaultName = path.basename(filePath, ".tscn");
         const rootName = root_node_name ?? defaultName;
 
         const scriptRoot = await resolveScriptRoot(projectDir, root_node_type);
-        let scene = parser.createScene(scriptRoot?.baseType ?? root_node_type, rootName);
+        const effectiveType = scriptRoot?.baseType ?? root_node_type;
+        if (!isNativeNodeClass(effectiveType)) {
+          throw new Error(
+            scriptRoot
+              ? `Script ${scriptRoot.scriptPath} extends unknown or non-instantiable Node type: ${effectiveType}`
+              : `Unknown node type: ${root_node_type}`
+          );
+        }
+
+        await mkdir(path.dirname(filePath), { recursive: true });
+
+        let scene = parser.createScene(effectiveType, rootName);
         if (scriptRoot) {
           const added = parser.addExtResource(scene, "Script", scriptRoot.scriptPath);
           scene = added.scene;
