@@ -9,6 +9,7 @@ import type { BridgeConnection } from "../connection.js";
 import type { ImportAssetResponse, ReadResourceResponse, WriteResourceResponse } from "../types/bridge-responses.js";
 import { expandPath, resolveProjectPath } from "../project-utils.js";
 import { cleanOutput } from "../output-utils.js";
+import { resolveScriptRoot } from "../script-class-resolver.js";
 
 const execFileAsync = promisify(execFile);
 const parser = new TscnParser();
@@ -79,7 +80,7 @@ export function registerFileTools(
         .describe('Scene path (e.g. "res://scenes/player.tscn")'),
       root_node_type: z
         .string()
-        .describe('Root node type (e.g. "CharacterBody2D")'),
+        .describe('Root node type: a native class (e.g. "CharacterBody2D"), a script class_name (e.g. "WaveManager"), or a script path (e.g. "res://wave_manager.gd"). Scripts are attached to a root of their native base type.'),
       root_node_name: z
         .string()
         .optional()
@@ -95,7 +96,13 @@ export function registerFileTools(
         const defaultName = path.basename(filePath, ".tscn");
         const rootName = root_node_name ?? defaultName;
 
-        const scene = parser.createScene(root_node_type, rootName);
+        const scriptRoot = await resolveScriptRoot(projectDir, root_node_type);
+        let scene = parser.createScene(scriptRoot?.baseType ?? root_node_type, rootName);
+        if (scriptRoot) {
+          const added = parser.addExtResource(scene, "Script", scriptRoot.scriptPath);
+          scene = added.scene;
+          scene.nodes[0].properties.script = `ExtResource("${added.id}")`;
+        }
 
         await writeScene(filePath, scene);
 
@@ -103,7 +110,9 @@ export function registerFileTools(
           content: [
             {
               type: "text",
-              text: `Created scene at ${filePath} with root ${root_node_type} "${rootName}"`,
+              text: scriptRoot
+                ? `Created scene at ${filePath} with root ${scriptRoot.baseType} "${rootName}" (script ${scriptRoot.scriptPath})`
+                : `Created scene at ${filePath} with root ${root_node_type} "${rootName}"`,
             },
           ],
         };
