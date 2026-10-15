@@ -514,8 +514,13 @@ export function registerFileTools(
     async ({ paths }) => {
       try {
         const result = await bridge.send<ImportAssetResponse>("resource.import", { paths });
+        const failed =
+          result != null &&
+          typeof result === "object" &&
+          ("error" in result || (result as { success?: boolean }).success === false);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          ...(failed ? { isError: true as const } : {}),
         };
       } catch (e) {
         return {

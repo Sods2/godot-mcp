@@ -105,7 +105,7 @@ func import_asset(editor_interface: EditorInterface, params: Dictionary) -> Dict
 		fs.update_file(p)
 
 	if valid_paths.is_empty():
-		return {"error": "No valid asset paths found", "missing": missing}
+		return {"success": false, "error": "No valid asset paths found", "missing": missing}
 
 	# Discover new files and let any queued imports settle before reimport.
 	if not fs.is_scanning():
@@ -131,7 +131,7 @@ func import_asset(editor_interface: EditorInterface, params: Dictionary) -> Dict
 	var imported: Array = []
 	var failed: Array = []
 	for p in valid_paths:
-		var sidecar := p + ".import"
+		var sidecar: String = str(p) + ".import"
 		if FileAccess.file_exists(sidecar) or ResourceLoader.exists(p):
 			imported.append(p)
 		else:
