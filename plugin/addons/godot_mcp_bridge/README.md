@@ -75,7 +75,7 @@ The plugin runs a TCP server inside the Godot editor process. The external MCP s
 
 | Method | Description |
 |--------|-------------|
-| `resource.import` | Reimport assets in the editor |
+| `resource.import` | Scan filesystem then reimport assets (works for newly added files) |
 | `resource.read` | Read a resource's properties |
 | `resource.write` | Write properties to a resource |
 

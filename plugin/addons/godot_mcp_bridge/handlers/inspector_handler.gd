@@ -82,10 +82,76 @@ func set_property(editor_interface: EditorInterface, params: Dictionary) -> Dict
 	return {"success": true, "property": prop_name, "value": str(actual)}
 
 func import_asset(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	# Newly copied files are invisible to reimport_files until the editor
+	# filesystem has scanned (or update_file has registered) them. Scan first,
+	# wait for the scan/import to finish, then reimport and verify.
 	var paths: Array = params.get("paths", [])
-	var packed := PackedStringArray(paths)
-	editor_interface.get_resource_filesystem().reimport_files(packed)
-	return {"success": true, "paths": paths}
+	if paths.is_empty():
+		return {"error": "No paths provided"}
+
+	var fs := editor_interface.get_resource_filesystem()
+	var missing: Array = []
+	var valid_paths: Array = []
+	for path in paths:
+		var p: String = str(path)
+		if not p.begins_with("res://"):
+			missing.append(p + " (must use res://)")
+			continue
+		if not FileAccess.file_exists(p):
+			missing.append(p)
+			continue
+		valid_paths.append(p)
+		# Register newly added files in the editor filesystem cache.
+		fs.update_file(p)
+
+	if valid_paths.is_empty():
+		return {"error": "No valid asset paths found", "missing": missing}
+
+	# Discover new files and let any queued imports settle before reimport.
+	if not fs.is_scanning():
+		fs.scan()
+	var tree := Engine.get_main_loop() as SceneTree
+	var frames := 0
+	const MAX_WAIT_FRAMES := 600  # ~10s at 60fps
+	while tree != null and frames < MAX_WAIT_FRAMES and (fs.is_scanning() or fs.is_importing()):
+		await tree.process_frame
+		frames += 1
+
+	var packed := PackedStringArray()
+	for p in valid_paths:
+		packed.append(p)
+	# Docs: avoid reimport_files while an import is still in progress.
+	frames = 0
+	while tree != null and frames < MAX_WAIT_FRAMES and fs.is_importing():
+		await tree.process_frame
+		frames += 1
+	fs.reimport_files(packed)
+
+	# Verify rather than reporting blind success (repro_7: expect .import sidecars).
+	var imported: Array = []
+	var failed: Array = []
+	for p in valid_paths:
+		var sidecar := p + ".import"
+		if FileAccess.file_exists(sidecar) or ResourceLoader.exists(p):
+			imported.append(p)
+		else:
+			failed.append(p)
+
+	if not failed.is_empty():
+		var err := {
+			"success": false,
+			"paths": valid_paths,
+			"imported": imported,
+			"error": "Import did not produce loadable assets for: %s. The editor may still be scanning — retry, or run Godot with --import." % ", ".join(PackedStringArray(failed)),
+		}
+		if not missing.is_empty():
+			err["missing"] = missing
+		return err
+
+	var result := {"success": true, "paths": valid_paths}
+	if not missing.is_empty():
+		result["missing"] = missing
+	return result
 
 func read_resource(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var res_path: String = params.get("path", "")
