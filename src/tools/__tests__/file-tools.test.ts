@@ -111,7 +111,29 @@ describe("file-tools", () => {
         root_node_type: "Texture2D",
       });
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Unknown node type: Texture2D");
+      expect(result.content[0].text).toContain("Texture2D is not a Node type");
+      expect(vi.mocked(writeFile)).not.toHaveBeenCalled();
+    });
+
+    it("refuses empty root_node_type without writing a scene", async () => {
+      const result = await mockServer.callTool("godot_create_scene", {
+        project_path: "/proj",
+        scene_path: "res://empty.tscn",
+        root_node_type: "",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("root_node_type is required");
+      expect(vi.mocked(writeFile)).not.toHaveBeenCalled();
+    });
+
+    it("suggests correct casing for Node root_node_type", async () => {
+      const result = await mockServer.callTool("godot_create_scene", {
+        project_path: "/proj",
+        scene_path: "res://case.tscn",
+        root_node_type: "node2d",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Did you mean Node2D?");
       expect(vi.mocked(writeFile)).not.toHaveBeenCalled();
     });
   });

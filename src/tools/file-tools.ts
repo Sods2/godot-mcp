@@ -10,7 +10,7 @@ import type { ImportAssetResponse, ReadResourceResponse, WriteResourceResponse }
 import { expandPath, resolveProjectPath } from "../project-utils.js";
 import { cleanOutput } from "../output-utils.js";
 import { resolveScriptRoot } from "../script-class-resolver.js";
-import { isNativeNodeClass } from "../native-node-classes.js";
+import { isNativeNodeClass, invalidRootNodeTypeMessage } from "../native-node-classes.js";
 
 const execFileAsync = promisify(execFile);
 const parser = new TscnParser();
@@ -95,13 +95,17 @@ export function registerFileTools(
         const defaultName = path.basename(filePath, ".tscn");
         const rootName = root_node_name ?? defaultName;
 
+        if (!root_node_type.trim()) {
+          throw new Error(invalidRootNodeTypeMessage(root_node_type));
+        }
+
         const scriptRoot = await resolveScriptRoot(projectDir, root_node_type);
         const effectiveType = scriptRoot?.baseType ?? root_node_type;
         if (!isNativeNodeClass(effectiveType)) {
           throw new Error(
             scriptRoot
               ? `Script ${scriptRoot.scriptPath} extends unknown or non-instantiable Node type: ${effectiveType}`
-              : `Unknown node type: ${root_node_type}`
+              : invalidRootNodeTypeMessage(root_node_type)
           );
         }
 
