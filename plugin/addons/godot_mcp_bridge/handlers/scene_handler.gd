@@ -160,13 +160,25 @@ func open_scene(editor_interface: EditorInterface, params: Dictionary) -> Dictio
 		return {"error": "Failed to open scene: " + scene_path}
 	return {"success": true, "open_scenes": Array(open_scenes)}
 
+static func _clean_paths(paths) -> Array:
+	# Godot reports a single "" when no scene is open; drop blanks.
+	var out: Array = []
+	for p in paths:
+		if String(p) != "":
+			out.append(String(p))
+	return out
+
 func close_scene(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var scene_path: String = params.get("path", "")
 	if scene_path == "":
 		return {"error": "path is required"}
-	var open_scenes: PackedStringArray = editor_interface.get_open_scenes()
+	var force: bool = bool(params.get("force", false))
+	var open_scenes: Array = _clean_paths(editor_interface.get_open_scenes())
 	if scene_path not in open_scenes:
-		return {"error": "Scene is not open in the editor: " + scene_path, "open_scenes": Array(open_scenes)}
+		return {"error": "Scene is not open in the editor: " + scene_path, "open_scenes": open_scenes}
+	var unsaved: bool = scene_path in editor_interface.get_unsaved_scenes()
+	if unsaved and not force:
+		return {"error": "Scene has unsaved changes in the editor: " + scene_path + ". Save it first, or pass force: true to discard them and close."}
 	# Remember the active tab so we can restore it if it isn't the one being closed.
 	var previous: String = ""
 	var cur_root: Node = editor_interface.get_edited_scene_root()
@@ -180,10 +192,38 @@ func close_scene(editor_interface: EditorInterface, params: Dictionary) -> Dicti
 		return {"error": "close_scene failed (error %d) for %s" % [err, scene_path]}
 	if previous != "" and previous != scene_path and previous in editor_interface.get_open_scenes():
 		editor_interface.open_scene_from_path(previous)
-	var remaining: PackedStringArray = editor_interface.get_open_scenes()
+	var remaining: Array = _clean_paths(editor_interface.get_open_scenes())
 	if scene_path in remaining:
-		return {"error": "Scene still open after close: " + scene_path, "open_scenes": Array(remaining)}
-	return {"success": true, "closed": scene_path, "open_scenes": Array(remaining), "unsaved_changes_discarded": true}
+		return {"error": "Scene still open after close: " + scene_path, "open_scenes": remaining}
+	return {"success": true, "closed": scene_path, "open_scenes": remaining, "discarded_unsaved_changes": unsaved}
+
+## Make every open scene clean before an editor restart: save (default) or, with
+## save:false + force:true, discard by reloading from disk. Refuses otherwise.
+func prepare_reload_project(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var save: bool = bool(params.get("save", true))
+	var force: bool = bool(params.get("force", false))
+	var unsaved: Array = _clean_paths(editor_interface.get_unsaved_scenes())
+	var discarded: Array = []
+	var saved: Array = []
+	if not unsaved.is_empty():
+		if save:
+			editor_interface.save_all_scenes()
+			var still: Array = _clean_paths(editor_interface.get_unsaved_scenes())
+			for p in unsaved:
+				if p not in still:
+					saved.append(p)
+			if not still.is_empty():
+				return {"error": "Could not save scenes before restart: " + ", ".join(still) + ". Nothing was restarted.", "unsaved_scenes": still}
+		elif force:
+			for p in unsaved:
+				editor_interface.reload_scene_from_path(p)
+				discarded.append(p)
+			var still2: Array = _clean_paths(editor_interface.get_unsaved_scenes())
+			if not still2.is_empty():
+				return {"error": "Could not discard unsaved changes in: " + ", ".join(still2) + ". Nothing was restarted.", "unsaved_scenes": still2}
+		else:
+			return {"error": "Unsaved changes in: " + ", ".join(unsaved) + ". Pass save: true to save them, or force: true to discard them and restart.", "unsaved_scenes": unsaved}
+	return {"success": true, "restarting": true, "saved_scenes": saved, "discarded_unsaved_changes": not discarded.is_empty(), "discarded_scenes": discarded}
 
 func save_scene(editor_interface: EditorInterface) -> Dictionary:
 	editor_interface.save_scene()
