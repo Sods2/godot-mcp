@@ -6,7 +6,11 @@ extends RefCounted
 # JSON, so a Vector2 arrives as {"x":1,"y":2} (a Dictionary) and a Color as
 # {"r":..} or "#rrggbb". Assigning those straight to a typed property silently
 # no-ops, so coerce first and the assignment actually takes.
-static func coerce(value, type: int):
+#
+# hint / hint_string come from get_property_list() and disambiguate TYPE_OBJECT:
+# RESOURCE_TYPE loads res:// paths; NODE_TYPE turns a path string into NodePath
+# (call resolve_for_assignment afterwards to get the live Node).
+static func coerce(value, type: int, hint: int = PROPERTY_HINT_NONE, hint_string: String = ""):
 	match type:
 		TYPE_BOOL:
 			return bool(value)
@@ -18,6 +22,10 @@ static func coerce(value, type: int):
 			return str(value)
 		TYPE_STRING_NAME:
 			return StringName(str(value))
+		TYPE_NODE_PATH:
+			return _node_path(value)
+		TYPE_OBJECT:
+			return _object(value, hint, hint_string)
 		TYPE_VECTOR2:
 			return _vec2(value)
 		TYPE_VECTOR2I:
@@ -42,6 +50,58 @@ static func coerce(value, type: int):
 			return Rect2i(roundi(r.position.x), roundi(r.position.y), roundi(r.size.x), roundi(r.size.y))
 		_:
 			return value
+
+
+# After coerce(), Node-typed Object properties may still hold a NodePath (path
+# string from JSON). Resolve it relative to owner before assignment. Returns
+# {"ok": bool, "value": Variant, "error": String}.
+static func resolve_for_assignment(coerced, owner: Node, target_type: int) -> Dictionary:
+	if coerced is NodePath and target_type == TYPE_OBJECT:
+		var np: NodePath = coerced
+		if np.is_empty():
+			return {"ok": true, "value": null, "error": ""}
+		if owner == null:
+			return {"ok": false, "value": null, "error": "Cannot resolve NodePath without an owner node"}
+		var resolved: Node = owner.get_node_or_null(np)
+		if resolved == null:
+			return {"ok": false, "value": null, "error": "Node not found for path: %s" % str(np)}
+		return {"ok": true, "value": resolved, "error": ""}
+	return {"ok": true, "value": coerced, "error": ""}
+
+
+static func _node_path(value) -> NodePath:
+	if value == null:
+		return NodePath()
+	if value is NodePath:
+		return value
+	return NodePath(str(value))
+
+
+static func _object(value, hint: int, _hint_string: String):
+	if value == null:
+		return null
+	if value is Object:
+		return value
+	# Empty string clears an Object/Resource/Node property.
+	if value is String and value == "":
+		return null
+	if value is String:
+		var s: String = value
+		# Resource / Script from a project path.
+		if s.begins_with("res://") or s.begins_with("user://"):
+			if ResourceLoader.exists(s):
+				return ResourceLoader.load(s)
+			# Still try load — exists() can be false for brand-new files.
+			return ResourceLoader.load(s)
+		# Node-typed export: keep as NodePath so the caller can resolve against
+		# the property owner (paths are relative to that node, not the scene root).
+		if hint == PROPERTY_HINT_NODE_TYPE:
+			return NodePath(s)
+		# RESOURCE_TYPE with an explicit URI prefix.
+		if hint == PROPERTY_HINT_RESOURCE_TYPE and s.contains("://"):
+			return ResourceLoader.load(s)
+		return value
+	return value
 
 
 static func _num(value, key: String, idx: int, def: float) -> float:
