@@ -53,16 +53,22 @@ static func coerce(value, type: int, hint: int = PROPERTY_HINT_NONE, hint_string
 
 
 # After coerce(), Node-typed Object properties may still hold a NodePath (path
-# string from JSON). Resolve it relative to owner before assignment. Returns
+# string from JSON). Resolve it relative to owner first (Godot Node-export
+# convention), then fall back to scene_root so callers can also pass paths the
+# same way other tools do (from the edited scene root). Returns
 # {"ok": bool, "value": Variant, "error": String}.
-static func resolve_for_assignment(coerced, owner: Node, target_type: int) -> Dictionary:
+static func resolve_for_assignment(coerced, owner: Node, target_type: int, scene_root: Node = null) -> Dictionary:
 	if coerced is NodePath and target_type == TYPE_OBJECT:
 		var np: NodePath = coerced
 		if np.is_empty():
 			return {"ok": true, "value": null, "error": ""}
-		if owner == null:
+		if owner == null and scene_root == null:
 			return {"ok": false, "value": null, "error": "Cannot resolve NodePath without an owner node"}
-		var resolved: Node = owner.get_node_or_null(np)
+		var resolved: Node = null
+		if owner != null:
+			resolved = owner.get_node_or_null(np)
+		if resolved == null and scene_root != null and scene_root != owner:
+			resolved = scene_root.get_node_or_null(np)
 		if resolved == null:
 			return {"ok": false, "value": null, "error": "Node not found for path: %s" % str(np)}
 		return {"ok": true, "value": resolved, "error": ""}

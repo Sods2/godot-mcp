@@ -108,6 +108,19 @@ func _run() -> void:
 	_check_true(child_res["ok"] and child_res["value"] == child, "resolve finds direct child")
 	var missing := Coerce.resolve_for_assignment(NodePath("Missing"), owner, TYPE_OBJECT)
 	_check_true(missing["ok"] == false, "resolve missing fails")
+
+	# Scene-root fallback: owner-relative "Enemy" fails (sibling is not a child of
+	# owner), but the same path resolves from scene_root.
+	var enemy := Node.new()
+	enemy.name = "Enemy"
+	root.add_child(enemy)
+	var owner_only := Coerce.resolve_for_assignment(NodePath("Enemy"), owner, TYPE_OBJECT)
+	_check_true(owner_only["ok"] == false, "owner-relative Enemy fails (not under owner)")
+	var via_root := Coerce.resolve_for_assignment(NodePath("Enemy"), owner, TYPE_OBJECT, root)
+	_check_true(via_root["ok"] == true, "root fallback ok for Enemy")
+	_check_true(via_root["value"] == enemy, "root fallback finds Enemy")
+	var still_missing := Coerce.resolve_for_assignment(NodePath("Nope"), owner, TYPE_OBJECT, root)
+	_check_true(still_missing["ok"] == false, "root fallback still fails for missing")
 	root.free()
 
 	# Unknown/unsupported type still passes the value through unchanged.
