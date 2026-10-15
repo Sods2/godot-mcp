@@ -244,9 +244,9 @@ export async function getAutoloads(
   const config = parseProjectConfig(content);
   const autoloadSection = config.rawSections["autoload"] ?? {};
   return Object.entries(autoloadSection).map(([name, value]) => {
-    const enabled = value.startsWith("*");
-    const scriptPath = enabled ? value.slice(1) : value;
-    return { name, path: scriptPath.replace(/^"(.*)"$/, "$1"), enabled };
+    const unquoted = value.trim().replace(/^"(.*)"$/, "$1");
+    const enabled = unquoted.startsWith("*");
+    return { name, path: enabled ? unquoted.slice(1) : unquoted, enabled };
   });
 }
 
