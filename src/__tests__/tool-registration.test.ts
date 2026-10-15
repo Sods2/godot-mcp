@@ -14,6 +14,7 @@ import { registerFileTools } from "../tools/file-tools.js";
 import { registerRunTools } from "../tools/run-tools.js";
 import { registerTestTools } from "../tools/test-tools.js";
 import { registerExportTools } from "../tools/export-tools.js";
+import { registerInputMapTools } from "../tools/input-map-tools.js";
 
 // Tools registered inline in index.ts
 const INLINE_TOOL_NAMES = [
@@ -109,10 +110,15 @@ const EXPECTED_TOOL_NAMES = [
   "godot_list_export_presets",
   "godot_export_project",
   "godot_export_mesh_library",
+  // Input Map tools
+  "godot_list_input_actions",
+  "godot_add_input_action",
+  "godot_add_input_event",
+  "godot_remove_input_action",
 ];
 
 describe("tool-registration", () => {
-  it("registers all 66 modular tools via register* functions", () => {
+  it("registers all 70 modular tools via register* functions", () => {
     const mockServer = createMockServer();
     const mockBridge = createMockBridge();
     const mockPM = createMockProcessManager();
@@ -130,6 +136,7 @@ describe("tool-registration", () => {
     registerRunTools(mockServer.server, mockPM, mockBridge, godotPath);
     registerTestTools(mockServer.server, godotPath);
     registerExportTools(mockServer.server, godotPath);
+    registerInputMapTools(mockServer.server, mockBridge);
 
     const registered = mockServer.getToolNames();
     expect(registered).toHaveLength(EXPECTED_TOOL_NAMES.length);
@@ -156,6 +163,7 @@ describe("tool-registration", () => {
     registerRunTools(mockServer.server, mockPM, mockBridge, godotPath);
     registerTestTools(mockServer.server, godotPath);
     registerExportTools(mockServer.server, godotPath);
+    registerInputMapTools(mockServer.server, mockBridge);
 
     const names = mockServer.getToolNames();
     const unique = new Set(names);
@@ -180,6 +188,7 @@ describe("tool-registration", () => {
     registerRunTools(mockServer.server, mockPM, mockBridge, godotPath);
     registerTestTools(mockServer.server, godotPath);
     registerExportTools(mockServer.server, godotPath);
+    registerInputMapTools(mockServer.server, mockBridge);
 
     for (const [, tool] of mockServer.getTools()) {
       expect(tool.description.length).toBeGreaterThan(0);
@@ -194,7 +203,7 @@ describe("tool-registration", () => {
     expect(INLINE_TOOL_NAMES).toContain("godot_add_autoload");
   });
 
-  it("total tool count (modular + inline) equals 77", () => {
-    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(77);
+  it("total tool count (modular + inline) equals 81", () => {
+    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(81);
   });
 });

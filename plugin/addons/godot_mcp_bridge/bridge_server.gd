@@ -10,6 +10,7 @@ const _ScreenshotHandlerScript = preload("res://addons/godot_mcp_bridge/handlers
 const _SignalHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/signal_handler.gd")
 const _AnimationHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/animation_handler.gd")
 const _DebugHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/debug_handler.gd")
+const _InputMapHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/input_map_handler.gd")
 const _ProfilerHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/profiler_handler.gd")
 
 var editor_interface: EditorInterface
@@ -29,6 +30,7 @@ var _signal_handler
 var _animation_handler
 var _debug_handler
 var _profiler_handler
+var _input_map_handler
 var _debugger_ref = null
 
 # Deferred responses: Array of {id, type, frames_waited, extra}
@@ -55,6 +57,7 @@ func _ensure_handlers() -> void:
 	_screenshot_handler = _ScreenshotHandlerScript.new()
 	_signal_handler = _SignalHandlerScript.new()
 	_animation_handler = _AnimationHandlerScript.new()
+	_input_map_handler = _InputMapHandlerScript.new()
 
 func set_debugger(debugger) -> void:
 	_debug_handler = _DebugHandlerScript.new(debugger)
@@ -229,6 +232,14 @@ func _handle_message(msg: Dictionary) -> void:
 			result = _scene_handler.duplicate_node(editor_interface, params)
 		"scene.move_node":
 			result = _scene_handler.move_node(editor_interface, params)
+		"input_map.list":
+			result = _input_map_handler.list_actions(params)
+		"input_map.add_action":
+			result = _input_map_handler.add_action(params)
+		"input_map.add_event":
+			result = _input_map_handler.add_event(params)
+		"input_map.remove_action":
+			result = _input_map_handler.remove_action(params)
 		"signal.list":
 			result = _signal_handler.list_signals(editor_interface, params)
 		"signal.connect":
