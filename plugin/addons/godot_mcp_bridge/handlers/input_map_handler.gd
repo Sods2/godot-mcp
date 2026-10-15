@@ -74,6 +74,12 @@ static func _key_text(ev: InputEventKey) -> String:
 static func _event_sig(ev: InputEvent) -> String:
 	var d := event_to_dict(ev)
 	d.erase("text")
+	if ev is InputEventKey:
+		# unicode/key_label are derived/metadata; the binding is keycode/physical_keycode + modifiers.
+		# Only keep key_label when it is the sole identifier of the key.
+		d.erase("unicode")
+		if ev.keycode != 0 or ev.physical_keycode != 0:
+			d.erase("key_label")
 	if ev is InputEventJoypadMotion:
 		d["axis_value"] = signf(ev.axis_value)  # direction is what matters in the Input Map
 	return var_to_str(d)
