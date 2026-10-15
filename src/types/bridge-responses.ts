@@ -2,6 +2,8 @@
 export interface EditorStatusResponse {
   connected: true;
   open_scenes: string[];
+  /** res:// path of the scene being edited (active tab); "" if none/unsaved. */
+  edited_scene?: string;
   is_playing: boolean;
 }
 
