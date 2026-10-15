@@ -129,11 +129,11 @@ export function registerEditorTools(
     }
   );
 
-  const reloadSceneHandler = async ({ scene_path }: { scene_path?: string }) => {
+  const reloadSceneHandler = async ({ scene_path, force }: { scene_path?: string; force?: boolean }) => {
     try {
       const result = await bridge.send<Record<string, unknown>>(
         "scene.reload",
-        scene_path ? { path: scene_path } : {}
+        { ...(scene_path ? { path: scene_path } : {}), ...(force ? { force: true } : {}) }
       );
       if (result && typeof result === "object" && "error" in result) {
         return {
@@ -154,12 +154,16 @@ export function registerEditorTools(
 
   server.tool(
     "godot_reload_scene",
-    "Reload a scene from disk in the Godot editor, discarding the editor's in-memory copy (like Scene > Reload Saved Scene). Use after the .tscn was edited outside the editor so the next save doesn't overwrite those changes. Unsaved editor changes to that scene are lost.",
+    "Reload a scene from disk in the Godot editor, discarding the editor's in-memory copy (like Scene > Reload Saved Scene). Use after the .tscn was edited outside the editor so the next save doesn't overwrite those changes. If the scene has unsaved editor changes the call is refused unless force is true (then they are discarded and the result has discarded_unsaved_changes: true). If the scene is not currently open, it is opened from disk in a new tab and the result has reloaded: false. Only .tscn/.scn files are accepted.",
     {
       scene_path: z
         .string()
         .optional()
         .describe("Scene to reload (res:// path). Defaults to the currently edited scene."),
+      force: z
+        .boolean()
+        .optional()
+        .describe("Discard unsaved editor changes to the scene and reload anyway. Default false (refuse)."),
     },
     reloadSceneHandler
   );

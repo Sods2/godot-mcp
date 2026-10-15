@@ -138,6 +138,18 @@ describe("editor-tools", () => {
       expect(mockBridge._getCalls()[0].params).toEqual({});
     });
 
+    it("passes force: true through", async () => {
+      mockBridge._setResponse("scene.reload", { success: true, discarded_unsaved_changes: true });
+      await mockServer.callTool("godot_reload_scene", { scene_path: "res://main.tscn", force: true });
+      expect(mockBridge._getCalls()[0].params).toEqual({ path: "res://main.tscn", force: true });
+    });
+
+    it("omits force when false", async () => {
+      mockBridge._setResponse("scene.reload", { success: true });
+      await mockServer.callTool("godot_reload_scene", { scene_path: "res://main.tscn", force: false });
+      expect(mockBridge._getCalls()[0].params).toEqual({ path: "res://main.tscn" });
+    });
+
     it("marks a bridge error result as isError", async () => {
       mockBridge._setResponse("scene.reload", { error: "Scene file not found: res://x.tscn" });
       const result = await mockServer.callTool("godot_reload_scene", { scene_path: "res://x.tscn" });

@@ -172,16 +172,25 @@ func reload_scene(editor_interface: EditorInterface, params: Dictionary) -> Dict
 		scene_path = root.scene_file_path
 	if not FileAccess.file_exists(scene_path):
 		return {"error": "Scene file not found: " + scene_path}
+	var ext: String = scene_path.get_extension().to_lower()
+	if ext != "tscn" and ext != "scn":
+		return {"error": "Not a scene file (expected .tscn or .scn): " + scene_path}
+	if not ResourceLoader.exists(scene_path, "PackedScene"):
+		return {"error": "File could not be loaded as a PackedScene: " + scene_path}
+	var force: bool = bool(params.get("force", false))
 	var was_open: bool = scene_path in editor_interface.get_open_scenes()
+	var unsaved: bool = was_open and scene_path in editor_interface.get_unsaved_scenes()
+	if unsaved and not force:
+		return {"error": "Scene has unsaved changes in the editor: " + scene_path + ". Save it first, or pass force: true to discard them and reload."}
 	if was_open:
 		editor_interface.reload_scene_from_path(scene_path)
 	else:
-		# Not open: opening it reads the current file from disk.
+		# Not open: opening it in a new tab reads the current file from disk.
 		editor_interface.open_scene_from_path(scene_path)
 	var open_scenes: PackedStringArray = editor_interface.get_open_scenes()
 	if scene_path not in open_scenes:
-		return {"error": "Failed to reload scene: " + scene_path}
-	return {"success": true, "reloaded": was_open, "path": scene_path, "open_scenes": Array(open_scenes)}
+		return {"error": "Failed to reload scene (editor did not open it; file may be corrupt): " + scene_path}
+	return {"success": true, "reloaded": was_open, "discarded_unsaved_changes": unsaved, "path": scene_path, "open_scenes": Array(open_scenes)}
 
 func save_scene(editor_interface: EditorInterface) -> Dictionary:
 	editor_interface.save_scene()
