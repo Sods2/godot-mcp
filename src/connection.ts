@@ -1,4 +1,5 @@
 import * as net from "node:net";
+import { outdatedAddonMessage } from "./addon-version.js";
 
 const INITIAL_RETRY_MS = 1000;
 const MAX_RETRY_MS = 30000;
@@ -12,6 +13,7 @@ interface PendingRequest {
   resolve: (value: any) => void;
   reject: (reason: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+  method: string;
 }
 
 export class BridgeConnection {
@@ -55,7 +57,7 @@ export class BridgeConnection {
         this.pending.delete(id);
         reject(new Error(`Request timeout for method: ${method}`));
       }, REQUEST_TIMEOUT_MS);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, method });
     });
   }
 
@@ -134,7 +136,14 @@ export class BridgeConnection {
         if (pending) {
           this.pending.delete(response.id);
           clearTimeout(pending.timer);
-          if (response.error) pending.reject(new Error(response.error.message));
+          if (response.error) {
+            // -32601 = method not found: the addon predates this command.
+            const msg =
+              response.error.code === -32601
+                ? outdatedAddonMessage(`bridge does not know command "${pending.method}" (${response.error.message})`)
+                : response.error.message;
+            pending.reject(new Error(msg));
+          }
           else pending.resolve(response.result);
         }
       } catch {

@@ -413,7 +413,12 @@ func _handle_editor_status() -> Dictionary:
 	var edited_root := EditorInterface.get_edited_scene_root()
 	if edited_root:
 		edited_scene = edited_root.scene_file_path
+	var cfg := ConfigFile.new()
+	var addon_version := ""
+	if cfg.load("res://addons/godot_mcp_bridge/plugin.cfg") == OK:
+		addon_version = str(cfg.get_value("plugin", "version", ""))
 	return {
+		"addon_version": addon_version,
 		"edited_scene": edited_scene,
 		"connected": true,
 		"boot_id": _boot_id,

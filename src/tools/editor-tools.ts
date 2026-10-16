@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { checkAddonStatus } from "../addon-version.js";
 import type { BridgeConnection } from "../connection.js";
 import type { EditorStatusResponse, SceneTreeResponse, SelectedNodesResponse, GetPropertiesResponse, OpenSceneResponse, ReparentNodeResponse, RenameNodeResponse, DuplicateNodeResponse, MoveNodeResponse } from "../types/bridge-responses.js";
 
@@ -21,8 +22,9 @@ export function registerEditorTools(
       }
       try {
         const result = await bridge.send<EditorStatusResponse>("editor.status");
+        const warning = checkAddonStatus(result);
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify(warning ? { ...result, warning } : result, null, 2) }],
         };
       } catch (e) {
         return {
