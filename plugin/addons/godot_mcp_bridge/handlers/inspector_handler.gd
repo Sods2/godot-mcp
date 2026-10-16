@@ -54,13 +54,28 @@ func set_property(editor_interface: EditorInterface, params: Dictionary) -> Dict
 	# Determine the property's expected Variant type so a JSON value (e.g. a
 	# Dictionary {"x":1,"y":2} for a Vector2) is coerced to the real type before
 	# assignment. Prefer the declared type from the property list, falling back
-	# to the current value's type.
+	# to the current value's type. Hints distinguish Node exports (NodePath
+	# strings) from Resource/Script exports (res:// loads).
 	var target_type := typeof(old_value)
+	var target_hint := PROPERTY_HINT_NONE
+	var target_hint_string := ""
 	for prop in node.get_property_list():
 		if prop["name"] == prop_name:
 			target_type = int(prop["type"])
+			target_hint = int(prop["hint"])
+			target_hint_string = str(prop.get("hint_string", ""))
 			break
-	var coerced = _Coerce.coerce(prop_value, target_type)
+	var coerced = _Coerce.coerce(prop_value, target_type, target_hint, target_hint_string)
+	var resolved := _Coerce.resolve_for_assignment(coerced, node, target_type, root)
+	if not resolved["ok"]:
+		return {
+			"success": false,
+			"property": prop_name,
+			"error": resolved["error"],
+			"requested": str(prop_value),
+			"value": str(old_value)
+		}
+	coerced = resolved["value"]
 
 	var undo_redo := editor_interface.get_editor_undo_redo()
 	undo_redo.create_action("Set Property: " + prop_name)
@@ -113,13 +128,19 @@ func write_resource(editor_interface: EditorInterface, params: Dictionary) -> Di
 	if res == null:
 		return {"error": "Resource not found: " + res_path}
 	# Coerce JSON values to each property's real Variant type so composite types
-	# (Vector2, Color, …) are not silently dropped the way a raw Dictionary would.
+	# (Vector2, Color, …) and Resource/Script paths are not silently dropped.
 	var type_map := {}
+	var hint_map := {}
 	for prop in res.get_property_list():
 		type_map[prop["name"]] = int(prop["type"])
+		hint_map[prop["name"]] = {
+			"hint": int(prop["hint"]),
+			"hint_string": str(prop.get("hint_string", ""))
+		}
 	for key in properties:
 		var target_type: int = type_map.get(key, typeof(res.get(key)))
-		res.set(key, _Coerce.coerce(properties[key], target_type))
+		var h: Dictionary = hint_map.get(key, {"hint": PROPERTY_HINT_NONE, "hint_string": ""})
+		res.set(key, _Coerce.coerce(properties[key], target_type, int(h["hint"]), str(h["hint_string"])))
 	var err := ResourceSaver.save(res, res_path)
 	if err != OK:
 		return {"error": "Failed to save resource: " + str(err)}

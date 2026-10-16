@@ -38,7 +38,7 @@ config/features=PackedStringArray("4.3")
 EOF
 
 failed=0
-for test_file in "$PROJECT_DIR"/tests/gdscript/*.gd; do
+for test_file in "$PROJECT_DIR"/tests/gdscript/test_*.gd; do
   name="$(basename "$test_file")"
   echo "--- $name ---"
   if ! "$GODOT" --headless --path "$PROJECT_DIR" --script "res://tests/gdscript/$name"; then
