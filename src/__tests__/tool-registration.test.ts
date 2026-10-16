@@ -205,7 +205,7 @@ describe("tool-registration", () => {
     expect(INLINE_TOOL_NAMES).toContain("godot_add_autoload");
   });
 
-  it("total tool count (modular + inline) equals 79", () => {
-    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(79);
+  it("total tool count (modular + inline) equals 83", () => {
+    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(83);
   });
 });

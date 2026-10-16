@@ -159,6 +159,10 @@ describe("editor-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("scene.reload", new Error("timeout"));
       const result = await mockServer.callTool("godot_reload_scene", { scene_path: "res://main.tscn" });
+      expect(result.isError).toBe(true);
+    });
+  });
+
   describe("godot_close_scene", () => {
     it("sends scene.close with path param renamed", async () => {
       mockBridge._setResponse("scene.close", { success: true, open_scenes: ["res://main.tscn"] });
