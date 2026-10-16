@@ -99,13 +99,13 @@ Create or update `.mcp.json` in your Claude project root:
 }
 ```
 
-> **Setting `GODOT_PATH`:** The install script auto-detects Godot and pre-fills this value. If it can't find Godot, or if you install to a custom location, set the path explicitly. The server checks `GODOT_PATH`, then `godot` on `$PATH`, then these standard locations:
+> **Setting `GODOT_PATH`:** The install script auto-detects Godot and pre-fills this value. If it can't find Godot, or if you install to a custom location, set the path explicitly. The server checks `GODOT_PATH`, then `godot`, `godot4` and `Godot_v4*` on `$PATH`, then these standard locations:
 >
 > | Platform | Typical paths |
 > |----------|--------------|
-> | macOS | `/Applications/Godot.app/Contents/MacOS/Godot` |
-> | Linux | `/usr/bin/godot`, `~/.local/bin/godot` |
-> | Windows | `C:\Program Files\Godot\Godot.exe` |
+> | macOS | `/Applications/Godot*.app`, `~/Applications/Godot*.app`, Homebrew, Steam |
+> | Linux | `/usr/bin`, `/usr/local/bin`, `~/.local/bin`, Flatpak (`org.godotengine.Godot`), Snap, Steam |
+> | Windows | `Program Files\Godot*`, `%LOCALAPPDATA%\Programs`, Scoop, Steam, `Downloads\Godot_v4*.exe` |
 >
 > On macOS the executable is inside the `.app` bundle at `Godot.app/Contents/MacOS/Godot`.
 
