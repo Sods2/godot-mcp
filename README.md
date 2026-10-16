@@ -5,7 +5,7 @@
 
 A Model Context Protocol (MCP) server that gives AI assistants full integration with the Godot game engine IDE. Interact with live editor state, parse and modify scene files, run projects, capture screenshots, debug with breakpoints, profile performance, and more.
 
-**83 tools** across 16 categories, covering the full Godot development workflow.
+**84 tools** across 16 categories, covering the full Godot development workflow.
 
 ## Features
 
@@ -24,7 +24,7 @@ A Model Context Protocol (MCP) server that gives AI assistants full integration 
 - **GDScript validation** — Validate scripts using Godot's `--check-only` flag
 - **Testing** — Detect, list, create, and run GDScript tests with GUT, GdUnit4, or the built-in runner
 - **Resource UIDs** — Look up and update Godot 4.4+ resource UIDs
-- **Autoloads** — List and add autoload singletons
+- **Autoloads** — List, add and remove autoload singletons
 - **Auto-detects Godot** — Finds the Godot executable automatically on macOS, Windows, and Linux (including Steam installs)
 
 ## Architecture
@@ -150,7 +150,8 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `godot_get_autoloads` | List all autoload singletons configured in the project | `project_path` |
-| `godot_add_autoload` | Add an autoload singleton to the project | `name`, `script_path` |
+| `godot_add_autoload` | Add an autoload singleton. Goes through the editor when the bridge is connected (so the editor's settings can't overwrite it), else edits `project.godot`. Fails if the script is missing or the name exists unless `overwrite` | `name`, `script_path`, `overwrite` |
+| `godot_remove_autoload` | Remove an autoload singleton (editor bridge, or `project.godot` fallback) | `name` |
 
 ### Editor Control
 

@@ -26,6 +26,7 @@ const INLINE_TOOL_NAMES = [
   "godot_update_uids",
   "godot_get_autoloads",
   "godot_add_autoload",
+  "godot_remove_autoload",
 ];
 
 const EXPECTED_TOOL_NAMES = [
@@ -199,13 +200,14 @@ describe("tool-registration", () => {
 
   it("all inline tool names are documented in INLINE_TOOL_NAMES constant", () => {
     // This verifies the expected inline tools list is complete
-    expect(INLINE_TOOL_NAMES).toHaveLength(8);
+    expect(INLINE_TOOL_NAMES).toHaveLength(9);
     expect(INLINE_TOOL_NAMES).toContain("godot_get_version");
     expect(INLINE_TOOL_NAMES).toContain("godot_get_autoloads");
     expect(INLINE_TOOL_NAMES).toContain("godot_add_autoload");
+    expect(INLINE_TOOL_NAMES).toContain("godot_remove_autoload");
   });
 
-  it("total tool count (modular + inline) equals 83", () => {
-    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(83);
+  it("total tool count (modular + inline) equals 84", () => {
+    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(84);
   });
 });
