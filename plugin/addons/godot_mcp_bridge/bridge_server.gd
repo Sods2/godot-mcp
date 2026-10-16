@@ -198,6 +198,8 @@ func _handle_message(msg: Dictionary) -> void:
 			result = _scene_handler.reparent_node(editor_interface, params)
 		"scene.open":
 			result = _scene_handler.open_scene(editor_interface, params)
+		"scene.reload":
+			result = _scene_handler.reload_scene(editor_interface, params)
 		"scene.save":
 			result = _scene_handler.save_scene(editor_interface)
 		"inspector.get_properties":

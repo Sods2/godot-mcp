@@ -121,6 +121,48 @@ describe("editor-tools", () => {
     });
   });
 
+  describe("godot_reload_scene", () => {
+    it("sends scene.reload with path param renamed", async () => {
+      mockBridge._setResponse("scene.reload", { success: true, reloaded: true });
+      const result = await mockServer.callTool("godot_reload_scene", {
+        scene_path: "res://main.tscn",
+      });
+      expect(mockBridge._getCalls()[0].method).toBe("scene.reload");
+      expect(mockBridge._getCalls()[0].params).toEqual({ path: "res://main.tscn" });
+      expect(result.isError).toBeFalsy();
+    });
+
+    it("defaults to the edited scene when scene_path is omitted", async () => {
+      mockBridge._setResponse("scene.reload", { success: true });
+      await mockServer.callTool("godot_reload_scene", {});
+      expect(mockBridge._getCalls()[0].params).toEqual({});
+    });
+
+    it("passes force: true through", async () => {
+      mockBridge._setResponse("scene.reload", { success: true, discarded_unsaved_changes: true });
+      await mockServer.callTool("godot_reload_scene", { scene_path: "res://main.tscn", force: true });
+      expect(mockBridge._getCalls()[0].params).toEqual({ path: "res://main.tscn", force: true });
+    });
+
+    it("omits force when false", async () => {
+      mockBridge._setResponse("scene.reload", { success: true });
+      await mockServer.callTool("godot_reload_scene", { scene_path: "res://main.tscn", force: false });
+      expect(mockBridge._getCalls()[0].params).toEqual({ path: "res://main.tscn" });
+    });
+
+    it("marks a bridge error result as isError", async () => {
+      mockBridge._setResponse("scene.reload", { error: "Scene file not found: res://x.tscn" });
+      const result = await mockServer.callTool("godot_reload_scene", { scene_path: "res://x.tscn" });
+      expect(result.isError).toBe(true);
+    });
+
+    it("returns error when bridge throws", async () => {
+      mockBridge._setError("scene.reload", new Error("timeout"));
+      const result = await mockServer.callTool("godot_reload_scene", { scene_path: "res://main.tscn" });
+      expect(result.isError).toBe(true);
+    });
+  });
+
   describe("godot_reparent_node", () => {
     it("sends scene.reparent_node with path and new_parent", async () => {
       await mockServer.callTool("godot_reparent_node", {
