@@ -21,9 +21,6 @@ const INLINE_TOOL_NAMES = [
   "godot_list_projects",
   "godot_get_project_info",
   "godot_launch_editor",
-  "godot_run_project",
-  "godot_stop_project",
-  "godot_get_debug_output",
   "godot_get_uid",
   "godot_update_uids",
   "godot_get_autoloads",
@@ -188,13 +185,13 @@ describe("tool-registration", () => {
 
   it("all inline tool names are documented in INLINE_TOOL_NAMES constant", () => {
     // This verifies the expected inline tools list is complete
-    expect(INLINE_TOOL_NAMES).toHaveLength(11);
+    expect(INLINE_TOOL_NAMES).toHaveLength(8);
     expect(INLINE_TOOL_NAMES).toContain("godot_get_version");
     expect(INLINE_TOOL_NAMES).toContain("godot_get_autoloads");
     expect(INLINE_TOOL_NAMES).toContain("godot_add_autoload");
   });
 
-  it("total tool count (modular + inline) equals 77", () => {
-    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(77);
+  it("total tool count (modular + inline) equals 74", () => {
+    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(74);
   });
 });

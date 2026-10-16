@@ -47,9 +47,13 @@ New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 Copy-Item -Recurse -Force (Join-Path $ProjectDir "build")        $Dest
 Copy-Item -Recurse -Force (Join-Path $ProjectDir "scripts")      $Dest
 Copy-Item          -Force (Join-Path $ProjectDir "package.json") $Dest
+# Copy the lockfile so the install uses the same resolved tree as the repo.
+# Without it, a fresh `npm install` can hit a cryptic "edgesOut" crash on
+# some npm versions; `npm ci` also requires the lockfile.
+Copy-Item          -Force (Join-Path $ProjectDir "package-lock.json") $Dest
 
 Push-Location $Dest
-& npm install --omit=dev
+& npm ci --omit=dev
 $installExit = $LASTEXITCODE
 Pop-Location
 
@@ -62,7 +66,7 @@ if (($installExit -ne 0) -or -not (Test-Path (Join-Path $Dest "node_modules\@mod
   Write-Error @"
 dependency install failed — $Dest\node_modules is incomplete.
   Re-run with a current npm (>=10):
-    cd "$Dest"; npm install --omit=dev
+    cd "$Dest"; npm ci --omit=dev
   If npm crashes with an 'edgesOut' error, first: npm install -g npm@latest
 "@
   exit 1

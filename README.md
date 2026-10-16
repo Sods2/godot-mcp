@@ -5,7 +5,7 @@
 
 A Model Context Protocol (MCP) server that gives AI assistants full integration with the Godot game engine IDE. Interact with live editor state, parse and modify scene files, run projects, capture screenshots, debug with breakpoints, profile performance, and more.
 
-**77 tools** across 15 categories, covering the full Godot development workflow.
+**74 tools** across 15 categories, covering the full Godot development workflow.
 
 ## Features
 
@@ -243,9 +243,6 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `godot_run_project` | Run the project in debug mode | `project_path`, `scene` |
-| `godot_stop_project` | Stop the running project | — |
-| `godot_get_debug_output` | Get stdout/stderr from the running project | — |
 | `godot_run_scene` | Run a scene (via editor bridge or process spawn) | `project_path`, `scene` |
 | `godot_stop_scene` | Stop the running scene | — |
 | `godot_get_output` | Get scene output with incremental polling | `since_line` (return lines after this index) |
