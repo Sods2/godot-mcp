@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
@@ -263,6 +263,55 @@ describe("file-tools", () => {
       });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("project-level errors");
+    });
+  });
+
+  describe("godot_validate_script via bridge", () => {
+    beforeEach(() => {
+      mockBridge._setConnected(true);
+      vi.mocked(execFile).mockClear();
+    });
+    afterEach(() => {
+      mockBridge._setConnected(false);
+      mockBridge._reset();
+    });
+
+    it("uses script.validate when bridge is connected and skips --check-only", async () => {
+      mockBridge._setResponse("script.validate", { path: "res://uses_state.gd", valid: true, error_code: 0, error: "", errors: [], details_captured: true });
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://uses_state.gd" });
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain("valid");
+      expect(mockBridge._getCalls()[0]).toEqual({ method: "script.validate", params: { path: "res://uses_state.gd" } });
+      expect(vi.mocked(execFile)).not.toHaveBeenCalled();
+    });
+
+    it("reports editor-side parse errors", async () => {
+      mockBridge._setResponse("script.validate", { valid: false, error_code: 43, error: "Parse error", errors: ["line 3: Identifier \"nope\" not declared"], details_captured: true });
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://bad.gd" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("line 3");
+      expect(vi.mocked(execFile)).not.toHaveBeenCalled();
+    });
+
+    it("returns bridge error (e.g. missing file) without falling back", async () => {
+      mockBridge._setResponse("script.validate", { error: "Script not found: res://x.gd" });
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://x.gd" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Script not found");
+    });
+
+    it("falls back to --check-only with a note when the addon is too old", async () => {
+      mockBridge._setError("script.validate", new Error("Unknown method: script.validate"));
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
+          (cb as (...args: unknown[]) => void)(null, { stdout: "", stderr: "" });
+          return {} as ReturnType<typeof execFile>;
+        }
+      );
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://a.gd" });
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain("older than this server");
+      expect(vi.mocked(execFile).mock.calls[0][1]).toContain("--check-only");
     });
   });
 

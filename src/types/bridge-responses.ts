@@ -265,3 +265,12 @@ export interface ProfilerFrame { [key: string]: unknown; }
 export interface StartProfilerResponse { success: true; }
 export interface StopProfilerResponse { success: true; frames: ProfilerFrame[]; }
 export interface GetProfilerDataResponse { frames: ProfilerFrame[]; }
+
+export interface ValidateScriptResponse {
+  path?: string;
+  valid?: boolean;
+  error_code?: number;
+  error?: string;
+  errors?: string[];
+  details_captured?: boolean;
+}
