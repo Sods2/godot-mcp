@@ -1,0 +1,8 @@
+config_version=5
+
+[application]
+config/name="AutoloadFixture"
+
+[autoload]
+GameState="*res://game_state.gd"
+Plain="res://plain.gd"
