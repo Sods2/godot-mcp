@@ -5,6 +5,8 @@ export interface EditorStatusResponse {
   /** res:// path of the scene being edited (active tab); "" if none/unsaved. */
   edited_scene?: string;
   is_playing: boolean;
+  /** Addon version from plugin.cfg; absent on addons predating the handshake. */
+  addon_version?: string;
 }
 
 // Scene
