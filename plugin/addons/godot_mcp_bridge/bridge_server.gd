@@ -264,7 +264,8 @@ func _handle_message(msg: Dictionary) -> void:
 			else:
 				result = _screenshot_handler.capture_game(editor_interface)
 		"resource.import":
-			result = _inspector_handler.import_asset(editor_interface, params)
+			# import_asset awaits EditorFileSystem scan/import; must await here so the response is sent afterwards.
+			result = await _inspector_handler.import_asset(editor_interface, params)
 		"resource.read":
 			result = _inspector_handler.read_resource(editor_interface, params)
 		"resource.write":

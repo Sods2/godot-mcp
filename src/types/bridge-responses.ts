@@ -227,6 +227,8 @@ export interface CreateAnimationResponse {
 export interface ImportAssetResponse {
   success: true;
   paths: string[];
+  /** Paths that were requested but missing or not res:// (partial success). */
+  missing?: string[];
 }
 
 export interface ReadResourceResponse {

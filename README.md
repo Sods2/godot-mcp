@@ -225,7 +225,7 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | `godot_delete_file` | Delete a file from the project | `path` |
 | `godot_rename_file` | Rename or move a file | `path`, `new_path` |
 | `godot_list_resources` | List resource files, optionally filtered by extension | `path`, `extensions` |
-| `godot_import_asset` | Reimport assets in the editor | `paths` (array) |
+| `godot_import_asset` | Scan then reimport assets (including newly added files) | `paths` (array) |
 | `godot_read_resource` | Read a resource's properties via the editor | `path` |
 | `godot_write_resource` | Write properties to a resource via the editor | `path`, `properties` |
 | `godot_get_uid` | Get the UID for a resource file (Godot 4.4+) | `file_path` |

@@ -565,15 +565,20 @@ export function registerFileTools(
 
   server.tool(
     "godot_import_asset",
-    "Reimport assets in the Godot editor",
+    "Scan the editor filesystem then reimport assets. Works for newly added files (e.g. a PNG just copied into the project) as well as existing assets that need reimport.",
     {
-      paths: z.array(z.string()).describe("Array of res:// paths to reimport"),
+      paths: z.array(z.string()).describe("Array of res:// paths to scan and reimport"),
     },
     async ({ paths }) => {
       try {
         const result = await bridge.send<ImportAssetResponse>("resource.import", { paths });
+        const failed =
+          result != null &&
+          typeof result === "object" &&
+          ("error" in result || (result as { success?: boolean }).success === false);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          ...(failed ? { isError: true as const } : {}),
         };
       } catch (e) {
         return {
