@@ -263,6 +263,6 @@ export async function addAutoload(
     config.rawSections["autoload"] = {};
   }
   config.rawSections["autoload"][name] = `"*${scriptPath}"`;
-  const newContent = serializeProjectConfig(config.rawSections);
+  const newContent = serializeProjectConfig(config.rawSections, config.preamble);
   await writeFile(projectFile, newContent, "utf-8");
 }
