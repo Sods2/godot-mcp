@@ -12,6 +12,7 @@ import {
 } from "./tools/project-tools.js";
 import { getUid, updateProjectUids } from "./tools/uid-tools.js";
 import { bridge } from "./connection.js";
+import { withAddonWarning } from "./addon-warning.js";
 import { registerEditorTools } from "./tools/editor-tools.js";
 import { registerScriptTools } from "./tools/script-tools.js";
 import { registerScreenshotTools } from "./tools/screenshot-tools.js";
@@ -197,20 +198,21 @@ server.tool(
 
 // --- Live editor tools (require plugin connection) ---
 
-registerEditorTools(server, bridge);
-registerScriptTools(server, bridge);
-registerScreenshotTools(server, bridge);
-registerSignalTools(server, bridge);
-registerAnimationTools(server, bridge);
-registerDebugTools(server, bridge);
-registerProfilerTools(server, bridge);
-registerInputMapTools(server, bridge);
+const bridgeServer = withAddonWarning(server, bridge);
+registerEditorTools(bridgeServer, bridge);
+registerScriptTools(bridgeServer, bridge);
+registerScreenshotTools(bridgeServer, bridge);
+registerSignalTools(bridgeServer, bridge);
+registerAnimationTools(bridgeServer, bridge);
+registerDebugTools(bridgeServer, bridge);
+registerProfilerTools(bridgeServer, bridge);
+registerInputMapTools(bridgeServer, bridge);
 
 // --- Hybrid tools (plugin + file fallback) ---
 
-registerSceneTools(server, bridge);
-registerFileTools(server, bridge, godotPath);
-registerRunTools(server, processManager, bridge, godotPath);
+registerSceneTools(bridgeServer, bridge);
+registerFileTools(bridgeServer, bridge, godotPath);
+registerRunTools(bridgeServer, processManager, bridge, godotPath);
 registerTestTools(server, godotPath);
 registerExportTools(server, godotPath);
 
