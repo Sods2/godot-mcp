@@ -23,6 +23,7 @@ import { registerAnimationTools } from "./tools/animation-tools.js";
 import { registerExportTools } from "./tools/export-tools.js";
 import { registerDebugTools } from "./tools/debug-tools.js";
 import { registerProfilerTools } from "./tools/profiler-tools.js";
+import { registerInputMapTools } from "./tools/input-map-tools.js";
 import { resolveProjectPath } from "./project-utils.js";
 
 const server = new McpServer({
@@ -202,6 +203,7 @@ registerSignalTools(server, bridge);
 registerAnimationTools(server, bridge);
 registerDebugTools(server, bridge);
 registerProfilerTools(server, bridge);
+registerInputMapTools(server, bridge);
 
 // --- Hybrid tools (plugin + file fallback) ---
 

@@ -5,7 +5,7 @@
 
 A Model Context Protocol (MCP) server that gives AI assistants full integration with the Godot game engine IDE. Interact with live editor state, parse and modify scene files, run projects, capture screenshots, debug with breakpoints, profile performance, and more.
 
-**74 tools** across 15 categories, covering the full Godot development workflow.
+**81 tools** across 16 categories, covering the full Godot development workflow.
 
 ## Features
 
@@ -207,6 +207,17 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | `godot_connect_signal` | Connect a signal to a method on another node | `from_path`, `signal_name`, `to_path`, `method`, `flags` |
 | `godot_disconnect_signal` | Disconnect a signal connection | `from_path`, `signal_name`, `to_path`, `method` |
 | `godot_list_connections` | List all signal connections on a node | `path` |
+
+### Input Map
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_list_input_actions` | List Input Map actions with deadzone and events | `include_builtin` |
+| `godot_add_input_action` | Add an action (or append events) and save project.godot | `action`, `deadzone`, `events`, `overwrite` |
+| `godot_add_input_event` | Append events to an existing action | `action`, `event`, `events` |
+| `godot_remove_input_action` | Remove an action and save project.godot | `action` |
+
+Events: `{type:"key", physical_keycode|keycode, shift?, ctrl?, alt?, meta?}`, `{type:"mouse_button", button_index}`, `{type:"joypad_button", button_index}`, `{type:"joypad_motion", axis, axis_value}`. Edits go through the editor's `ProjectSettings` and require the editor plugin.
 
 ### Animation
 
