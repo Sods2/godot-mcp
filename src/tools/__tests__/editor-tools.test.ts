@@ -159,6 +159,104 @@ describe("editor-tools", () => {
     it("returns error when bridge throws", async () => {
       mockBridge._setError("scene.reload", new Error("timeout"));
       const result = await mockServer.callTool("godot_reload_scene", { scene_path: "res://main.tscn" });
+  describe("godot_close_scene", () => {
+    it("sends scene.close with path param renamed", async () => {
+      mockBridge._setResponse("scene.close", { success: true, open_scenes: ["res://main.tscn"] });
+      const result = await mockServer.callTool("godot_close_scene", { scene_path: "res://level2.tscn" });
+      expect(result.isError).toBeUndefined();
+      expect(mockBridge._getCalls()[0].method).toBe("scene.close");
+      expect(mockBridge._getCalls()[0].params).toEqual({ path: "res://level2.tscn" });
+    });
+
+    it("marks bridge error payload as isError", async () => {
+      mockBridge._setResponse("scene.close", { error: "Scene is not open in the editor: res://x.tscn" });
+      const result = await mockServer.callTool("godot_close_scene", { scene_path: "res://x.tscn" });
+      expect(result.isError).toBe(true);
+    });
+
+    it("passes force:true through", async () => {
+      await mockServer.callTool("godot_close_scene", { scene_path: "res://a.tscn", force: true });
+      expect(mockBridge._getCalls()[0].params).toEqual({ path: "res://a.tscn", force: true });
+    });
+
+    it("returns error when bridge throws", async () => {
+      mockBridge._setError("scene.close", new Error("not connected"));
+      const result = await mockServer.callTool("godot_close_scene", { scene_path: "res://x.tscn" });
+      expect(result.isError).toBe(true);
+    });
+  });
+
+  describe("godot_reload_project", () => {
+    it("sends editor.reload_project with save default true, no wait", async () => {
+      mockBridge._setResponse("editor.reload_project", { success: true, restarting: true });
+      const result = await mockServer.callTool("godot_reload_project", { wait_for_reconnect: false });
+      expect(result.isError).toBeUndefined();
+      expect(mockBridge._getCalls()[0].method).toBe("editor.reload_project");
+      expect(mockBridge._getCalls()[0].params).toEqual({ save: true });
+    });
+
+    it("passes save:false through", async () => {
+      await mockServer.callTool("godot_reload_project", { save: false, wait_for_reconnect: false });
+      expect(mockBridge._getCalls()[0].params).toEqual({ save: false });
+    });
+
+    it("waits for disconnect then reconnect and returns status", async () => {
+      mockBridge._setResponse("editor.status", { connected: true, open_scenes: [] });
+      mockBridge.send.mockImplementationOnce(async () => {
+        setTimeout(() => mockBridge._setConnected(false), 100);
+        setTimeout(() => mockBridge._setConnected(true), 600);
+        return { success: true, restarting: true } as never;
+      });
+      const result = await mockServer.callTool("godot_reload_project", {});
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('"reconnected": true');
+      expect(mockBridge.reconnectNow).toHaveBeenCalled();
+    }, 10000);
+
+    it("refusal from bridge (unsaved) is isError and does not wait", async () => {
+      mockBridge._setResponse("editor.reload_project", { error: "Unsaved changes in: res://main.tscn" });
+      const result = await mockServer.callTool("godot_reload_project", { save: false });
+      expect(result.isError).toBe(true);
+      expect(mockBridge.reconnectNow).not.toHaveBeenCalled();
+    });
+
+    it("passes force through with save:false", async () => {
+      await mockServer.callTool("godot_reload_project", { save: false, force: true, wait_for_reconnect: false });
+      expect(mockBridge._getCalls()[0].params).toEqual({ save: false, force: true });
+    });
+
+    it("does not report success while the old editor (same boot_id) still answers", async () => {
+      mockBridge._setResponse("editor.status", { connected: true, boot_id: "old" });
+      mockBridge.send.mockImplementationOnce(async () => ({ success: true, restarting: true, boot_id: "old" }) as never);
+      const result = await mockServer.callTool("godot_reload_project", { timeout_sec: 1.5 });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).not.toContain('"reconnected": true');
+    }, 15000);
+
+    it("succeeds once a new boot_id answers", async () => {
+      mockBridge._setResponse("editor.status", { connected: true, boot_id: "new" });
+      mockBridge.send.mockImplementationOnce(async () => {
+        setTimeout(() => mockBridge._setConnected(false), 100);
+        setTimeout(() => mockBridge._setConnected(true), 600);
+        return { success: true, restarting: true, boot_id: "old" } as never;
+      });
+      const result = await mockServer.callTool("godot_reload_project", {});
+      expect(result.content[0].text).toContain('"reconnected": true');
+    }, 10000);
+
+    it("errors when bridge never reconnects", async () => {
+      mockBridge.send.mockImplementationOnce(async () => {
+        mockBridge._setConnected(false);
+        return { success: true } as never;
+      });
+      const result = await mockServer.callTool("godot_reload_project", { timeout_sec: 1.5 });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("did not answer");
+    }, 10000);
+
+    it("returns error when bridge throws", async () => {
+      mockBridge._setError("editor.reload_project", new Error("not connected"));
+      const result = await mockServer.callTool("godot_reload_project", { wait_for_reconnect: false });
       expect(result.isError).toBe(true);
     });
   });

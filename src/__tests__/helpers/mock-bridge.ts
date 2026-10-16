@@ -13,6 +13,7 @@ export function createMockBridge(options: { connected?: boolean } = {}) {
     },
     connect: vi.fn(async () => {}),
     close: vi.fn(() => {}),
+    reconnectNow: vi.fn(() => {}),
     send: vi.fn(async <T>(method: string, params: unknown = {}): Promise<T> => {
       calls.push({ method, params });
       if (errors.has(method)) throw errors.get(method)!;
