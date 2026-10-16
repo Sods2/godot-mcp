@@ -73,7 +73,7 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
     {
       node_path: z.string().describe("Node path (e.g. 'Player/Sprite2D')"),
       property: z.string().describe("Property name (e.g. 'position', 'texture')"),
-      value: z.any().describe("Property value. For Node exports: path relative to the node, or to the scene root as fallback."),
+      value: z.any().describe("Property value. For Node exports: path relative to the node, or to the scene root as fallback. For Resource properties: a res:// path (saved as ExtResource), or an inline sub-resource like {type:'CircleShape2D', radius:20} (saved as SubResource)."),
     },
     async ({ node_path, property, value }) => {
       if (!bridge.connected) {
