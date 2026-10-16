@@ -9,9 +9,19 @@ import type { BridgeConnection } from "../connection.js";
 import type { ImportAssetResponse, ValidateScriptResponse, ReadResourceResponse, WriteResourceResponse } from "../types/bridge-responses.js";
 import { expandPath, resolveProjectPath } from "../project-utils.js";
 import { cleanOutput } from "../output-utils.js";
+import { parseAutoloadNames, filterAutoloadErrors } from "../autoload-filter.js";
 
 const execFileAsync = promisify(execFile);
 const parser = new TscnParser();
+
+async function readAutoloadNames(projectDir: string): Promise<string[]> {
+  try {
+    const content = await readFile(path.join(projectDir, "project.godot"), "utf-8");
+    return typeof content === "string" ? parseAutoloadNames(content) : [];
+  } catch {
+    return [];
+  }
+}
 
 function resolveResPath(projectPath: string, resPath: string): string {
   const project = expandPath(projectPath);
@@ -331,7 +341,9 @@ export function registerFileTools(
           { timeout: 30000 }
         );
 
-        const output = [fallbackNote, cleanOutput((stdout + "\n" + stderr).trim())].filter(Boolean).join("\n");
+        const autoloads = await readAutoloadNames(projectDir);
+        const filtered = filterAutoloadErrors(cleanOutput((stdout + "\n" + stderr).trim()), autoloads);
+        const output = [fallbackNote, filtered.output].filter(Boolean).join("\n");
 
         // Even on exit code 0, Godot may have printed error indicators (e.g. corrupt
         // project scene causes a crash before script parsing actually ran).
@@ -358,7 +370,19 @@ export function registerFileTools(
         };
       } catch (e: unknown) {
         const err = e as Error & { stdout?: string; stderr?: string };
-        const output = cleanOutput(((err.stdout || "") + "\n" + (err.stderr || "")).trim());
+        let output = cleanOutput(((err.stdout || "") + "\n" + (err.stderr || "")).trim());
+        try {
+          const autoloads = await readAutoloadNames(resolveProjectPath(project_path));
+          const filtered = filterAutoloadErrors(output, autoloads);
+          if (filtered.downgraded > 0 && !filtered.hasErrors) {
+            return {
+              content: [{ type: "text", text: `Script is valid.\n${[fallbackNote, filtered.output].filter(Boolean).join("\n")}`.trim() }],
+            };
+          }
+          output = filtered.output;
+        } catch {
+          // keep unfiltered output
+        }
         let hint = "\n\nNote: headless validation (--check-only) needs an exclusive project lock and does not load autoloads. Open the project in the Godot editor with the godot_mcp_bridge addon enabled for accurate validation.";
         if (/Identifier not found/i.test(output)) {
           hint += " \"Identifier not found\" for an autoload name (e.g. a singleton from project.godot) is a known false positive of headless mode.";

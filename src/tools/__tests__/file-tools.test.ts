@@ -221,6 +221,35 @@ describe("file-tools", () => {
     });
   });
 
+  describe("godot_validate_script autoload downgrade (headless)", () => {
+    const PROJECT = '[autoload]\nGameState="*res://game_state.gd"\n';
+    const failWith = (stderr: string) =>
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
+          (cb as (...args: unknown[]) => void)(Object.assign(new Error("Command failed"), { stdout: "", stderr }));
+          return {} as ReturnType<typeof execFile>;
+        }
+      );
+
+    it("treats script as valid when only autoload errors remain", async () => {
+      vi.mocked(readFile).mockResolvedValue(PROJECT as unknown as Buffer);
+      failWith("SCRIPT ERROR: Parse Error: Identifier not found: GameState\n   at: GDScript::reload (res://a.gd:3)");
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://a.gd" });
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain("valid");
+      expect(result.content[0].text).toContain("autoload, not registered in headless mode");
+    });
+
+    it("keeps real errors alongside downgraded autoload ones", async () => {
+      vi.mocked(readFile).mockResolvedValue(PROJECT as unknown as Buffer);
+      failWith("SCRIPT ERROR: Parse Error: Identifier not found: GameState\nSCRIPT ERROR: Parse Error: Identifier not found: Nope");
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://a.gd" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Identifier not found: Nope");
+      expect(result.content[0].text).toContain("WARNING:");
+    });
+  });
+
   describe("godot_validate_script via bridge", () => {
     beforeEach(() => {
       mockBridge._setConnected(true);
