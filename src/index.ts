@@ -8,6 +8,7 @@ import {
   getProjectInfo,
   getAutoloads,
   addAutoload,
+  removeAutoload,
 } from "./tools/project-tools.js";
 import { getUid, updateProjectUids } from "./tools/uid-tools.js";
 import { bridge } from "./connection.js";
@@ -239,24 +240,50 @@ server.tool(
 
 server.tool(
   "godot_add_autoload",
-  "Add an autoload singleton to a Godot project",
+  "Add an autoload singleton to a Godot project. Routed through the editor when the bridge is connected (so the editor's settings don't overwrite it later); otherwise edits project.godot directly. Fails if the script is missing or the name exists (unless overwrite=true)",
   {
     project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
     name: z.string().describe("Autoload name (e.g. 'GameManager')"),
     script_path: z
       .string()
       .describe("res:// path to the script (e.g. 'res://src/game_manager.gd')"),
+    overwrite: z.boolean().optional().describe("Replace an existing autoload with the same name (default false)"),
   },
-  async ({ project_path, name, script_path }) => {
+  async ({ project_path, name, script_path, overwrite }) => {
     try {
       const projectDir = resolveProjectPath(project_path);
-      await addAutoload(projectDir, name, script_path);
+      const { via } = await addAutoload(projectDir, name, script_path, { overwrite, bridge });
       return {
         content: [
           {
             type: "text",
-            text: `Added autoload "${name}" -> ${script_path}`,
+            text: `Added autoload "${name}" -> ${script_path} (via ${via === "bridge" ? "editor" : "project.godot"})`,
           },
+        ],
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "godot_remove_autoload",
+  "Remove an autoload singleton from a Godot project (via the editor when the bridge is connected, otherwise by editing project.godot)",
+  {
+    project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
+    name: z.string().describe("Autoload name to remove"),
+  },
+  async ({ project_path, name }) => {
+    try {
+      const projectDir = resolveProjectPath(project_path);
+      const { via } = await removeAutoload(projectDir, name, { bridge });
+      return {
+        content: [
+          { type: "text", text: `Removed autoload "${name}" (via ${via === "bridge" ? "editor" : "project.godot"})` },
         ],
       };
     } catch (e) {

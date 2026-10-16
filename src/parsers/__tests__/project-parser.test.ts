@@ -196,6 +196,7 @@ describe("addAutoload (bug #1 regression)", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "godot-mcp-autoload-"));
     try {
       await writeFile(path.join(dir, "project.godot"), PROJECT_WITH_INPUT, "utf-8");
+      await writeFile(path.join(dir, "extra.gd"), "extends Node\n", "utf-8");
       await addAutoload(dir, "Extra", "res://extra.gd");
       const out = await readFile(path.join(dir, "project.godot"), "utf-8");
 
