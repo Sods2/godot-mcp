@@ -119,6 +119,37 @@ func _save() -> String:
 		return "ProjectSettings.save() failed: " + error_string(err)
 	return ""
 
+# Make the editor's Project Settings > Input Map tab pick up the change.
+func _refresh_editor_ui(key: String, present: bool) -> void:
+	if present:
+		ProjectSettings.set_as_basic(key, true)
+	ProjectSettings.emit_signal("settings_changed")
+	if not Engine.is_editor_hint():
+		return
+	var base := EditorInterface.get_base_control()
+	if base == null:
+		return
+	var pse := _find_node_by_class(base, "ProjectSettingsEditor")
+	if pse == null:
+		return
+	# Internal methods are not always reachable from script, so guard each call.
+	for m in ["_update_action_map_editor", "update_action_map_editor"]:
+		if pse.has_method(m):
+			pse.call_deferred(m)
+			return
+	var ame := _find_node_by_class(pse, "ActionMapEditor")
+	if ame != null and ame.has_method("update_action_list"):
+		ame.call_deferred("update_action_list")
+
+func _find_node_by_class(root: Node, cls: String) -> Node:
+	if root.get_class() == cls:
+		return root
+	for c in root.get_children(true):
+		var f := _find_node_by_class(c, cls)
+		if f != null:
+			return f
+	return null
+
 func list_actions(params: Dictionary) -> Dictionary:
 	var include_builtin: bool = bool(params.get("include_builtin", false))
 	var actions: Array = []
@@ -178,6 +209,7 @@ func add_action(params: Dictionary) -> Dictionary:
 	if err != "":
 		return {"error": err}
 	_sync_input_map(action, entry)
+	_refresh_editor_ui(key, true)
 	return {"success": true, "action": action, "created": not existed,
 		"deadzone": entry["deadzone"], "event_count": (entry["events"] as Array).size(), "skipped_duplicates": skipped}
 
@@ -202,4 +234,5 @@ func remove_action(params: Dictionary) -> Dictionary:
 	if err != "":
 		return {"error": err}
 	_sync_input_map(action, null)
+	_refresh_editor_ui(key, false)
 	return {"success": true, "action": action, "removed": true}
