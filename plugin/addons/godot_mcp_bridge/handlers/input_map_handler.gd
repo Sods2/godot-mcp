@@ -120,9 +120,30 @@ func _save() -> String:
 	return ""
 
 # Make the editor's Project Settings > Input Map tab pick up the change.
+# The first edit of a session can race the dialog (action not yet visible to it,
+# or the editor not idle), so refresh once now and again after a few frames,
+# re-looking up the nodes each pass.
 func _refresh_editor_ui(key: String, present: bool) -> void:
 	if present:
 		ProjectSettings.set_as_basic(key, true)
+	_refresh_pass()
+	if not Engine.is_editor_hint():
+		return
+	var base := EditorInterface.get_base_control()
+	if base == null or not base.is_inside_tree():
+		return
+	_refresh_later(base.get_tree(), key, present)
+
+func _refresh_later(tree: SceneTree, key: String, present: bool) -> void:
+	for i in 2:
+		await tree.process_frame
+	if present:
+		ProjectSettings.set_as_basic(key, true)
+	_refresh_pass()
+	await tree.create_timer(0.25).timeout
+	_refresh_pass()
+
+func _refresh_pass() -> void:
 	ProjectSettings.emit_signal("settings_changed")
 	if not Engine.is_editor_hint():
 		return
