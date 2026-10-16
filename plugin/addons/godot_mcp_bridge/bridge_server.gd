@@ -354,7 +354,14 @@ func _handle_editor_status() -> Dictionary:
 	for scene_path in EditorInterface.get_open_scenes():
 		if scene_path != "":
 			open_scenes.append(scene_path)
+	# The scene currently being edited (active tab). Tools that persist to a
+	# .tscn must use this, not open_scenes[0], which is just the first tab.
+	var edited_scene := ""
+	var edited_root := EditorInterface.get_edited_scene_root()
+	if edited_root:
+		edited_scene = edited_root.scene_file_path
 	return {
+		"edited_scene": edited_scene,
 		"connected": true,
 		"open_scenes": open_scenes,
 		"is_playing": EditorInterface.is_playing_scene(),
