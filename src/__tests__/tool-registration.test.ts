@@ -78,6 +78,7 @@ const EXPECTED_TOOL_NAMES = [
   "godot_get_profiler_data",
   // Scene tools
   "godot_add_node",
+  "godot_instance_scene",
   "godot_remove_node",
   "godot_set_property",
   "godot_save_scene",
@@ -96,6 +97,7 @@ const EXPECTED_TOOL_NAMES = [
   "godot_import_asset",
   "godot_read_resource",
   "godot_write_resource",
+  "godot_create_resource",
   // Run tools
   "godot_run_scene",
   "godot_stop_scene",

@@ -181,6 +181,7 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | `godot_get_selected_nodes` | Get the currently selected nodes | — |
 | `godot_get_node_properties` | Get all properties of a node by path | `path` |
 | `godot_add_node` | Add a node via the live editor | `node_type`, `node_name`, `parent_path`, `properties` (JSON) |
+| `godot_instance_scene` | Instance a PackedScene as a child (saved as `instance=ExtResource`) | `scene_path`, `parent_path`, `node_name` |
 | `godot_remove_node` | Remove a node via the live editor | `path` |
 | `godot_reparent_node` | Move a node to a new parent | `path`, `new_parent` |
 | `godot_rename_node` | Rename a node in the current scene | `path`, `new_name` |
@@ -242,6 +243,7 @@ Events: `{type:"key", physical_keycode|keycode, shift?, ctrl?, alt?, meta?}`, `{
 | `godot_import_asset` | Scan then reimport assets (including newly added files) | `paths` (array) |
 | `godot_read_resource` | Read a resource's properties via the editor | `path` |
 | `godot_write_resource` | Write properties to a resource via the editor | `path`, `properties` |
+| `godot_create_resource` | Create a new `.tres`/`.res` of a given type | `path`, `type`, `properties` |
 | `godot_get_uid` | Get the UID for a resource file (Godot 4.4+) | `file_path` |
 | `godot_update_uids` | Update all resource UIDs in the project | `project_path` |
 

@@ -414,3 +414,107 @@ func move_node(editor_interface: EditorInterface, params: Dictionary) -> Diction
 	undo_redo.commit_action()
 
 	return {"success": true, "new_index": new_index}
+
+## Instance a PackedScene as a child of a node in the edited scene.
+## Only the instance root is owned by the edited scene so save writes
+## `instance=ExtResource(...)` instead of inlining the packed children.
+func instance_scene(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var root: Node = editor_interface.get_edited_scene_root()
+	if root == null:
+		return {"error": "No scene open"}
+
+	var scene_path: String = str(params.get("scene_path", params.get("path", "")))
+	if scene_path == "":
+		return {"error": "scene_path is required"}
+
+	var parent_path: String = str(params.get("parent_path", params.get("parent", ".")))
+	var node_name: String = str(params.get("node_name", params.get("name", "")))
+
+	var parent: Node
+	if parent_path == "." or parent_path == "":
+		parent = root
+	else:
+		parent = root.get_node_or_null(parent_path)
+	if parent == null:
+		return {"error": "Parent node not found: " + parent_path}
+
+	if not ResourceLoader.exists(scene_path) and not FileAccess.file_exists(scene_path):
+		return {"error": "Scene file not found: " + scene_path}
+
+	# Refuse self / circular instancing (a scene that would contain itself).
+	var target_path: String = root.scene_file_path
+	if target_path != "":
+		var src_norm: String = _normalize_res_path(scene_path)
+		var dst_norm: String = _normalize_res_path(target_path)
+		if src_norm == dst_norm:
+			return {"error": "Cannot instance a scene into itself: " + scene_path}
+		var chain: Array = _find_dependency_chain(src_norm, dst_norm, {})
+		if not chain.is_empty():
+			return {"error": "Circular instance refused: %s already contains %s (via %s)" % [scene_path, target_path, " -> ".join(chain)]}
+
+	var loaded: Resource = ResourceLoader.load(scene_path)
+	if loaded == null or not (loaded is PackedScene):
+		return {"error": "Failed to load PackedScene: " + scene_path}
+	var packed: PackedScene = loaded as PackedScene
+
+	# GEN_EDIT_STATE_INSTANCE matches Scene → Instantiate Child Scene in the editor.
+	var instance: Node = packed.instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE)
+	if instance == null:
+		return {"error": "Failed to instantiate: " + scene_path}
+
+	if node_name != "":
+		instance.name = StringName(node_name)
+
+	var undo_redo: EditorUndoRedoManager = editor_interface.get_editor_undo_redo()
+	undo_redo.create_action("Instance Scene: " + str(instance.name))
+	undo_redo.add_do_method(parent, "add_child", instance)
+	undo_redo.add_do_method(instance, "set_owner", root)
+	undo_redo.add_undo_method(parent, "remove_child", instance)
+	undo_redo.commit_action()
+
+	# Ensure it stays a non-editable instance (children not inlined on save).
+	if editor_interface.has_method("set_editable_instance"):
+		editor_interface.set_editable_instance(instance, false)
+
+	var rel_path: String = str(root.get_path_to(instance))
+	return {
+		"success": true,
+		"path": rel_path,
+		"name": str(instance.name),
+		"scene_path": scene_path,
+		"scene_file_path": instance.scene_file_path,
+	}
+
+
+
+func _normalize_res_path(p: String) -> String:
+	if p.begins_with("uid://"):
+		var id: int = ResourceUID.text_to_id(p)
+		if id != ResourceUID.INVALID_ID and ResourceUID.has_id(id):
+			return ResourceUID.get_id_path(id)
+	if not p.begins_with("res://"):
+		p = ProjectSettings.localize_path(p)
+	return p.simplify_path()
+
+## Depth-first search of scene dependencies. Returns the path chain from
+## `from_path` to `target` if `from_path` (transitively) depends on it.
+func _find_dependency_chain(from_path: String, target: String, visited: Dictionary) -> Array:
+	if visited.has(from_path):
+		return []
+	visited[from_path] = true
+	for dep in ResourceLoader.get_dependencies(from_path):
+		var dep_path: String = str(dep)
+		if dep_path.contains("::"):
+			var parts: PackedStringArray = dep_path.split("::")
+			dep_path = parts[parts.size() - 1]
+			if dep_path == "":
+				dep_path = parts[0]
+		dep_path = _normalize_res_path(dep_path)
+		if not (dep_path.ends_with(".tscn") or dep_path.ends_with(".scn")):
+			continue
+		if dep_path == target:
+			return [from_path, dep_path]
+		var sub: Array = _find_dependency_chain(dep_path, target, visited)
+		if not sub.is_empty():
+			return [from_path] + sub
+	return []

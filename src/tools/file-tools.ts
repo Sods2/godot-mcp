@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import path from "node:path";
 import { TscnParser, type TscnScene } from "../parsers/tscn-parser.js";
 import type { BridgeConnection } from "../connection.js";
-import type { ImportAssetResponse, ValidateScriptResponse, ReadResourceResponse, WriteResourceResponse } from "../types/bridge-responses.js";
+import type { ImportAssetResponse, ValidateScriptResponse, ReadResourceResponse, WriteResourceResponse, CreateResourceResponse } from "../types/bridge-responses.js";
 import { expandPath, resolveProjectPath } from "../project-utils.js";
 import { cleanOutput } from "../output-utils.js";
 import { resolveScriptRoot } from "../script-class-resolver.js";
@@ -620,6 +620,47 @@ export function registerFileTools(
     async ({ path: resPath, properties }) => {
       try {
         const result = await bridge.send<WriteResourceResponse>("resource.write", { path: resPath, properties });
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "godot_create_resource",
+    "Create a new Godot resource (.tres/.res) of the given type and save it to path via the editor bridge. Unlike godot_write_resource, the file does not need to exist yet.",
+    {
+      path: z.string().describe("res:// path for the new resource (e.g. res://new_style.tres)"),
+      type: z.string().describe("Resource class name (e.g. StyleBoxFlat, AtlasTexture) or a global class_name"),
+      properties: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("Initial properties to set (Color as {r,g,b,a}, etc.)"),
+      overwrite: z
+        .boolean()
+        .optional()
+        .describe("Replace the file if it already exists (default false: refuse)"),
+    },
+    async ({ path: resPath, type, properties, overwrite }) => {
+      try {
+        const result = await bridge.send<CreateResourceResponse>("resource.create", {
+          path: resPath,
+          type,
+          properties: properties ?? {},
+          ...(overwrite ? { overwrite: true } : {}),
+        });
+        if (result && typeof result === "object" && "error" in result) {
+          return {
+            content: [{ type: "text", text: `Error: ${String((result as { error: string }).error)}` }],
+            isError: true,
+          };
+        }
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
