@@ -17,6 +17,24 @@ function errorResult(e: unknown) {
   };
 }
 
+/** Convert a bridge result that signals failure (error string, success:false, applied:false) into an MCP error. */
+function bridgeResult(result: unknown) {
+  const r = (result ?? {}) as Record<string, unknown>;
+  const failed =
+    (typeof r.error === "string" && r.error !== "") ||
+    r.success === false ||
+    r.applied === false;
+  if (!failed) return textResult(JSON.stringify(result, null, 2));
+  const msg =
+    typeof r.error === "string" && r.error !== ""
+      ? r.error
+      : `Operation failed${r.property ? ` for property '${String(r.property)}'` : ""} (bridge reported ${r.applied === false ? "applied:false" : "success:false"})`;
+  return {
+    content: [{ type: "text" as const, text: `Error: ${msg}\n${JSON.stringify(result, null, 2)}` }],
+    isError: true,
+  };
+}
+
 export function registerSceneTools(server: McpServer, bridge: BridgeConnection) {
   server.tool(
     "godot_add_node",
@@ -85,7 +103,7 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
           property,
           value,
         });
-        return textResult(JSON.stringify(result, null, 2));
+        return bridgeResult(result);
       } catch (e) {
         return errorResult(e);
       }

@@ -59,9 +59,12 @@ export interface GetPropertiesResponse {
 }
 
 export interface SetPropertyResponse {
-  success: true;
-  property: string;
-  value: string;
+  success: boolean;
+  applied?: boolean;
+  property?: string;
+  value?: string;
+  requested?: string;
+  error?: string;
 }
 
 // Script

@@ -16,6 +16,42 @@ describe("scene-tools", () => {
       registerSceneTools(mockServer.server, mockBridge);
     });
 
+    describe("godot_set_property failures", () => {
+      const args = { node_path: "Player", property: "position", value: 1 };
+      it("returns isError when bridge reports success:false", async () => {
+        mockBridge._setResponse("inspector.set_property", {
+          success: false,
+          property: "position",
+          error: "Property did not accept the value",
+        });
+        const result = await mockServer.callTool("godot_set_property", args);
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("Property did not accept the value");
+      });
+      it("returns isError when bridge reports applied:false", async () => {
+        mockBridge._setResponse("inspector.set_property", { applied: false, property: "position" });
+        const result = await mockServer.callTool("godot_set_property", args);
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("position");
+      });
+      it("returns isError for node not found / no scene (error-only result)", async () => {
+        mockBridge._setResponse("inspector.set_property", { error: "Node not found: Player" });
+        const result = await mockServer.callTool("godot_set_property", args);
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("Node not found: Player");
+      });
+      it("returns isError when bridge throws", async () => {
+        mockBridge._setError("inspector.set_property", new Error("boom"));
+        const result = await mockServer.callTool("godot_set_property", args);
+        expect(result.isError).toBe(true);
+      });
+      it("succeeds normally", async () => {
+        mockBridge._setResponse("inspector.set_property", { success: true, property: "position", value: "(1, 1)" });
+        const result = await mockServer.callTool("godot_set_property", args);
+        expect(result.isError).toBeUndefined();
+      });
+    });
+
     describe("godot_add_node", () => {
       it("sends scene.add_node with required params and defaults", async () => {
         mockBridge._setResponse("scene.add_node", {
