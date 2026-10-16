@@ -91,6 +91,29 @@ describe("file-tools", () => {
       });
       expect(result.content[0].text).toContain('"enemy"');
     });
+
+    it("refuses unknown root_node_type without writing a scene", async () => {
+      const result = await mockServer.callTool("godot_create_scene", {
+        project_path: "/proj",
+        scene_path: "res://broken.tscn",
+        root_node_type: "NotAClass",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Unknown node type: NotAClass");
+      expect(vi.mocked(writeFile)).not.toHaveBeenCalled();
+      expect(vi.mocked(mkdir)).not.toHaveBeenCalled();
+    });
+
+    it("refuses non-Node ClassDB types as root", async () => {
+      const result = await mockServer.callTool("godot_create_scene", {
+        project_path: "/proj",
+        scene_path: "res://tex.tscn",
+        root_node_type: "Texture2D",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Unknown node type: Texture2D");
+      expect(vi.mocked(writeFile)).not.toHaveBeenCalled();
+    });
   });
 
   describe("godot_add_node_to_file", () => {
