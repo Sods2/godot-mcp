@@ -244,25 +244,99 @@ export async function getAutoloads(
   const config = parseProjectConfig(content);
   const autoloadSection = config.rawSections["autoload"] ?? {};
   return Object.entries(autoloadSection).map(([name, value]) => {
-    const enabled = value.startsWith("*");
-    const scriptPath = enabled ? value.slice(1) : value;
-    return { name, path: scriptPath.replace(/^"(.*)"$/, "$1"), enabled };
+    const unquoted = value.trim().replace(/^"(.*)"$/, "$1");
+    const enabled = unquoted.startsWith("*");
+    return { name, path: enabled ? unquoted.slice(1) : unquoted, enabled };
   });
 }
 
+export interface AutoloadBridge {
+  connected: boolean;
+  send<T>(method: string, params?: unknown): Promise<T>;
+}
+
+function autoloadValue(raw: string): string {
+  return raw.trim().replace(/^"(.*)"$/, "$1");
+}
+
+export function resolveResPath(projectDir: string, resPath: string): string {
+  return path.join(projectDir, resPath.replace(/^res:\/\//, ""));
+}
+
+/**
+ * Add (or with overwrite, replace) an autoload. With the editor bridge
+ * connected the edit goes through the editor so its ProjectSettings copy and
+ * project.godot agree; otherwise project.godot is rewritten directly.
+ */
 export async function addAutoload(
   projectPath: string,
   name: string,
-  scriptPath: string
-): Promise<void> {
+  scriptPath: string,
+  options: { overwrite?: boolean; bridge?: AutoloadBridge } = {}
+): Promise<{ via: "bridge" | "file" }> {
   const dir = expandPath(projectPath);
+  const overwrite = options.overwrite ?? false;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid autoload name "${name}"`);
+  }
+  if (!scriptPath.startsWith("res://")) {
+    throw new Error(`script_path must start with res:// (got "${scriptPath}")`);
+  }
+  try {
+    const s = await stat(resolveResPath(dir, scriptPath));
+    if (!s.isFile()) throw new Error("not a file");
+  } catch {
+    throw new Error(`Script not found: ${scriptPath}`);
+  }
+
+  if (options.bridge?.connected) {
+    const result = await options.bridge.send<{ error?: string }>("project.add_autoload", {
+      name,
+      script_path: scriptPath,
+      overwrite,
+    });
+    if (result && typeof result.error === "string") throw new Error(result.error);
+    return { via: "bridge" };
+  }
+
   const projectFile = path.join(dir, "project.godot");
   const content = await readFile(projectFile, "utf-8");
   const config = parseProjectConfig(content);
   if (!config.rawSections["autoload"]) {
     config.rawSections["autoload"] = {};
   }
+  const existing = config.rawSections["autoload"][name];
+  if (existing !== undefined && !overwrite) {
+    throw new Error(
+      `Autoload "${name}" already exists (${autoloadValue(existing)}); pass overwrite=true to replace it`
+    );
+  }
   config.rawSections["autoload"][name] = `"*${scriptPath}"`;
-  const newContent = serializeProjectConfig(config.rawSections);
+  const newContent = serializeProjectConfig(config.rawSections, config.preamble);
   await writeFile(projectFile, newContent, "utf-8");
+  return { via: "file" };
+}
+
+export async function removeAutoload(
+  projectPath: string,
+  name: string,
+  options: { bridge?: AutoloadBridge } = {}
+): Promise<{ via: "bridge" | "file" }> {
+  const dir = expandPath(projectPath);
+  if (options.bridge?.connected) {
+    const result = await options.bridge.send<{ error?: string }>("project.remove_autoload", { name });
+    if (result && typeof result.error === "string") throw new Error(result.error);
+    return { via: "bridge" };
+  }
+  const projectFile = path.join(dir, "project.godot");
+  const content = await readFile(projectFile, "utf-8");
+  const config = parseProjectConfig(content);
+  const section = config.rawSections["autoload"];
+  if (!section || section[name] === undefined) {
+    throw new Error(`Autoload "${name}" not found`);
+  }
+  delete section[name];
+  const newContent = serializeProjectConfig(config.rawSections, config.preamble);
+  await writeFile(projectFile, newContent, "utf-8");
+  return { via: "file" };
 }

@@ -6,12 +6,24 @@ import { promisify } from "node:util";
 import path from "node:path";
 import { TscnParser, type TscnScene } from "../parsers/tscn-parser.js";
 import type { BridgeConnection } from "../connection.js";
-import type { ImportAssetResponse, ReadResourceResponse, WriteResourceResponse } from "../types/bridge-responses.js";
+import type { ImportAssetResponse, ValidateScriptResponse, ReadResourceResponse, WriteResourceResponse, CreateResourceResponse } from "../types/bridge-responses.js";
 import { expandPath, resolveProjectPath } from "../project-utils.js";
 import { cleanOutput } from "../output-utils.js";
+import { resolveScriptRoot } from "../script-class-resolver.js";
+import { isNativeNodeClass, invalidRootNodeTypeMessage } from "../native-node-classes.js";
+import { parseAutoloadNames, filterAutoloadErrors } from "../autoload-filter.js";
 
 const execFileAsync = promisify(execFile);
 const parser = new TscnParser();
+
+async function readAutoloadNames(projectDir: string): Promise<string[]> {
+  try {
+    const content = await readFile(path.join(projectDir, "project.godot"), "utf-8");
+    return typeof content === "string" ? parseAutoloadNames(content) : [];
+  } catch {
+    return [];
+  }
+}
 
 function resolveResPath(projectPath: string, resPath: string): string {
   const project = expandPath(projectPath);
@@ -79,7 +91,7 @@ export function registerFileTools(
         .describe('Scene path (e.g. "res://scenes/player.tscn")'),
       root_node_type: z
         .string()
-        .describe('Root node type (e.g. "CharacterBody2D")'),
+        .describe('Root node type: a native class (e.g. "CharacterBody2D"), a script class_name (e.g. "WaveManager"), or a script path (e.g. "res://wave_manager.gd"). Scripts are attached to a root of their native base type.'),
       root_node_name: z
         .string()
         .optional()
@@ -89,13 +101,32 @@ export function registerFileTools(
       try {
         const projectDir = resolveProjectPath(project_path);
         const filePath = resolveResPath(projectDir, scene_path);
-        const dirPath = path.dirname(filePath);
-        await mkdir(dirPath, { recursive: true });
 
         const defaultName = path.basename(filePath, ".tscn");
         const rootName = root_node_name ?? defaultName;
 
-        const scene = parser.createScene(root_node_type, rootName);
+        if (!root_node_type.trim()) {
+          throw new Error(invalidRootNodeTypeMessage(root_node_type));
+        }
+
+        const scriptRoot = await resolveScriptRoot(projectDir, root_node_type);
+        const effectiveType = scriptRoot?.baseType ?? root_node_type;
+        if (!isNativeNodeClass(effectiveType)) {
+          throw new Error(
+            scriptRoot
+              ? `Script ${scriptRoot.scriptPath} extends unknown or non-instantiable Node type: ${effectiveType}`
+              : invalidRootNodeTypeMessage(root_node_type)
+          );
+        }
+
+        await mkdir(path.dirname(filePath), { recursive: true });
+
+        let scene = parser.createScene(effectiveType, rootName);
+        if (scriptRoot) {
+          const added = parser.addExtResource(scene, "Script", scriptRoot.scriptPath);
+          scene = added.scene;
+          scene.nodes[0].properties.script = `ExtResource("${added.id}")`;
+        }
 
         await writeScene(filePath, scene);
 
@@ -103,7 +134,9 @@ export function registerFileTools(
           content: [
             {
               type: "text",
-              text: `Created scene at ${filePath} with root ${root_node_type} "${rootName}"`,
+              text: scriptRoot
+                ? `Created scene at ${filePath} with root ${scriptRoot.baseType} "${rootName}" (script ${scriptRoot.scriptPath})`
+                : `Created scene at ${filePath} with root ${root_node_type} "${rootName}"`,
             },
           ],
         };
@@ -266,7 +299,7 @@ export function registerFileTools(
 
   server.tool(
     "godot_validate_script",
-    "Validate a GDScript file using Godot's --check-only flag",
+    "Validate a GDScript file. Uses the running editor via the bridge when connected (sees autoloads and class_name globals, no project lock); otherwise falls back to headless --check-only, which needs the editor closed and reports autoload names as unknown",
     {
       project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       script_path: z
@@ -278,6 +311,37 @@ export function registerFileTools(
         .describe("Include warnings in output (passes -W flag to Godot)"),
     },
     async ({ project_path, script_path, include_warnings }) => {
+      // Preferred path: validate inside the running editor via the bridge.
+      // The editor knows autoload names and class_name globals and holds the
+      // project lock, so --check-only would be wrong (autoloads) or blocked.
+      let fallbackNote = "";
+      if (bridge.connected) {
+        try {
+          const res = await bridge.send<ValidateScriptResponse>("script.validate", { path: script_path });
+          if (res && typeof res.valid === "boolean") {
+            const details = (res.errors ?? []).filter((m) => m && m.trim()).join("\n");
+            if (res.valid) {
+              return { content: [{ type: "text", text: `Script is valid (checked in the running editor).\n${details}`.trim() }] };
+            }
+            const extra = res.details_captured
+              ? ""
+              : "\n(Detailed parse errors need Godot 4.5+; see the editor's Output panel.)";
+            return {
+              content: [{ type: "text", text: `Script has errors (checked in the running editor): ${res.error || "parse failed"}\n${details}${extra}`.trim() }],
+              isError: true,
+            };
+          }
+          if (res && res.error) {
+            return { content: [{ type: "text", text: `Error: ${res.error}` }], isError: true };
+          }
+          fallbackNote = "Note: editor bridge returned an unexpected response; fell back to headless --check-only.";
+        } catch (e) {
+          const msg = (e as Error).message ?? String(e);
+          fallbackNote = /Unknown method/i.test(msg)
+            ? "Note: the Godot addon is older than this server (no script.validate); fell back to headless --check-only. Update the godot_mcp_bridge addon for editor-side validation."
+            : `Note: editor bridge validation failed (${msg}); fell back to headless --check-only.`;
+        }
+      }
       try {
         const projectDir = resolveProjectPath(project_path);
         const gp = await godotPath();
@@ -300,7 +364,9 @@ export function registerFileTools(
           { timeout: 30000 }
         );
 
-        const output = cleanOutput((stdout + "\n" + stderr).trim());
+        const autoloads = await readAutoloadNames(projectDir);
+        const filtered = filterAutoloadErrors(cleanOutput((stdout + "\n" + stderr).trim()), autoloads);
+        const output = [fallbackNote, filtered.output].filter(Boolean).join("\n");
 
         // Even on exit code 0, Godot may have printed error indicators (e.g. corrupt
         // project scene causes a crash before script parsing actually ran).
@@ -327,8 +393,24 @@ export function registerFileTools(
         };
       } catch (e: unknown) {
         const err = e as Error & { stdout?: string; stderr?: string };
-        const output = cleanOutput(((err.stdout || "") + "\n" + (err.stderr || "")).trim());
-        const hint = "\n\nNote: godot_validate_script uses --check-only which requires an exclusive project lock. If the Godot editor is already open with this project, close it first before validating.";
+        let output = cleanOutput(((err.stdout || "") + "\n" + (err.stderr || "")).trim());
+        try {
+          const autoloads = await readAutoloadNames(resolveProjectPath(project_path));
+          const filtered = filterAutoloadErrors(output, autoloads);
+          if (filtered.downgraded > 0 && !filtered.hasErrors) {
+            return {
+              content: [{ type: "text", text: `Script is valid.\n${[fallbackNote, filtered.output].filter(Boolean).join("\n")}`.trim() }],
+            };
+          }
+          output = filtered.output;
+        } catch {
+          // keep unfiltered output
+        }
+        let hint = "\n\nNote: headless validation (--check-only) needs an exclusive project lock and does not load autoloads. Open the project in the Godot editor with the godot_mcp_bridge addon enabled for accurate validation.";
+        if (/Identifier not found/i.test(output)) {
+          hint += " \"Identifier not found\" for an autoload name (e.g. a singleton from project.godot) is a known false positive of headless mode.";
+        }
+        if (fallbackNote) hint = `\n\n${fallbackNote}` + hint;
         return {
           content: [
             {
@@ -507,15 +589,20 @@ export function registerFileTools(
 
   server.tool(
     "godot_import_asset",
-    "Reimport assets in the Godot editor",
+    "Scan the editor filesystem then reimport assets. Works for newly added files (e.g. a PNG just copied into the project) as well as existing assets that need reimport.",
     {
-      paths: z.array(z.string()).describe("Array of res:// paths to reimport"),
+      paths: z.array(z.string()).describe("Array of res:// paths to scan and reimport"),
     },
     async ({ paths }) => {
       try {
         const result = await bridge.send<ImportAssetResponse>("resource.import", { paths });
+        const failed =
+          result != null &&
+          typeof result === "object" &&
+          ("error" in result || (result as { success?: boolean }).success === false);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          ...(failed ? { isError: true as const } : {}),
         };
       } catch (e) {
         return {
@@ -557,6 +644,47 @@ export function registerFileTools(
     async ({ path: resPath, properties }) => {
       try {
         const result = await bridge.send<WriteResourceResponse>("resource.write", { path: resPath, properties });
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "godot_create_resource",
+    "Create a new Godot resource (.tres/.res) of the given type and save it to path via the editor bridge. Unlike godot_write_resource, the file does not need to exist yet.",
+    {
+      path: z.string().describe("res:// path for the new resource (e.g. res://new_style.tres)"),
+      type: z.string().describe("Resource class name (e.g. StyleBoxFlat, AtlasTexture) or a global class_name"),
+      properties: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("Initial properties to set (Color as {r,g,b,a}, etc.)"),
+      overwrite: z
+        .boolean()
+        .optional()
+        .describe("Replace the file if it already exists (default false: refuse)"),
+    },
+    async ({ path: resPath, type, properties, overwrite }) => {
+      try {
+        const result = await bridge.send<CreateResourceResponse>("resource.create", {
+          path: resPath,
+          type,
+          properties: properties ?? {},
+          ...(overwrite ? { overwrite: true } : {}),
+        });
+        if (result && typeof result === "object" && "error" in result) {
+          return {
+            content: [{ type: "text", text: `Error: ${String((result as { error: string }).error)}` }],
+            isError: true,
+          };
+        }
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };

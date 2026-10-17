@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
@@ -90,6 +90,51 @@ describe("file-tools", () => {
         root_node_type: "Node2D",
       });
       expect(result.content[0].text).toContain('"enemy"');
+    });
+
+    it("refuses unknown root_node_type without writing a scene", async () => {
+      const result = await mockServer.callTool("godot_create_scene", {
+        project_path: "/proj",
+        scene_path: "res://broken.tscn",
+        root_node_type: "NotAClass",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Unknown node type: NotAClass");
+      expect(vi.mocked(writeFile)).not.toHaveBeenCalled();
+      expect(vi.mocked(mkdir)).not.toHaveBeenCalled();
+    });
+
+    it("refuses non-Node ClassDB types as root", async () => {
+      const result = await mockServer.callTool("godot_create_scene", {
+        project_path: "/proj",
+        scene_path: "res://tex.tscn",
+        root_node_type: "Texture2D",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Texture2D is not a Node type");
+      expect(vi.mocked(writeFile)).not.toHaveBeenCalled();
+    });
+
+    it("refuses empty root_node_type without writing a scene", async () => {
+      const result = await mockServer.callTool("godot_create_scene", {
+        project_path: "/proj",
+        scene_path: "res://empty.tscn",
+        root_node_type: "",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("root_node_type is required");
+      expect(vi.mocked(writeFile)).not.toHaveBeenCalled();
+    });
+
+    it("suggests correct casing for Node root_node_type", async () => {
+      const result = await mockServer.callTool("godot_create_scene", {
+        project_path: "/proj",
+        scene_path: "res://case.tscn",
+        root_node_type: "node2d",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Did you mean Node2D?");
+      expect(vi.mocked(writeFile)).not.toHaveBeenCalled();
     });
   });
 
@@ -221,6 +266,84 @@ describe("file-tools", () => {
     });
   });
 
+  describe("godot_validate_script autoload downgrade (headless)", () => {
+    const PROJECT = '[autoload]\nGameState="*res://game_state.gd"\n';
+    const failWith = (stderr: string) =>
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
+          (cb as (...args: unknown[]) => void)(Object.assign(new Error("Command failed"), { stdout: "", stderr }));
+          return {} as ReturnType<typeof execFile>;
+        }
+      );
+
+    it("treats script as valid when only autoload errors remain", async () => {
+      vi.mocked(readFile).mockResolvedValue(PROJECT as unknown as Buffer);
+      failWith("SCRIPT ERROR: Parse Error: Identifier not found: GameState\n   at: GDScript::reload (res://a.gd:3)");
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://a.gd" });
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain("valid");
+      expect(result.content[0].text).toContain("autoload, not registered in headless mode");
+    });
+
+    it("keeps real errors alongside downgraded autoload ones", async () => {
+      vi.mocked(readFile).mockResolvedValue(PROJECT as unknown as Buffer);
+      failWith("SCRIPT ERROR: Parse Error: Identifier not found: GameState\nSCRIPT ERROR: Parse Error: Identifier not found: Nope");
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://a.gd" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Identifier not found: Nope");
+      expect(result.content[0].text).toContain("WARNING:");
+    });
+  });
+
+  describe("godot_validate_script via bridge", () => {
+    beforeEach(() => {
+      mockBridge._setConnected(true);
+      vi.mocked(execFile).mockClear();
+    });
+    afterEach(() => {
+      mockBridge._setConnected(false);
+      mockBridge._reset();
+    });
+
+    it("uses script.validate when bridge is connected and skips --check-only", async () => {
+      mockBridge._setResponse("script.validate", { path: "res://uses_state.gd", valid: true, error_code: 0, error: "", errors: [], details_captured: true });
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://uses_state.gd" });
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain("valid");
+      expect(mockBridge._getCalls()[0]).toEqual({ method: "script.validate", params: { path: "res://uses_state.gd" } });
+      expect(vi.mocked(execFile)).not.toHaveBeenCalled();
+    });
+
+    it("reports editor-side parse errors", async () => {
+      mockBridge._setResponse("script.validate", { valid: false, error_code: 43, error: "Parse error", errors: ["line 3: Identifier \"nope\" not declared"], details_captured: true });
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://bad.gd" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("line 3");
+      expect(vi.mocked(execFile)).not.toHaveBeenCalled();
+    });
+
+    it("returns bridge error (e.g. missing file) without falling back", async () => {
+      mockBridge._setResponse("script.validate", { error: "Script not found: res://x.gd" });
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://x.gd" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Script not found");
+    });
+
+    it("falls back to --check-only with a note when the addon is too old", async () => {
+      mockBridge._setError("script.validate", new Error("Unknown method: script.validate"));
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
+          (cb as (...args: unknown[]) => void)(null, { stdout: "", stderr: "" });
+          return {} as ReturnType<typeof execFile>;
+        }
+      );
+      const result = await mockServer.callTool("godot_validate_script", { project_path: "/proj", script_path: "res://a.gd" });
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain("older than this server");
+      expect(vi.mocked(execFile).mock.calls[0][1]).toContain("--check-only");
+    });
+  });
+
   describe("godot_create_folder", () => {
     it("creates directory at resolved path", async () => {
       vi.mocked(mkdir).mockResolvedValue(undefined);
@@ -345,7 +468,7 @@ describe("file-tools", () => {
     });
   });
 
-  describe("bridge-based tools (godot_import_asset, godot_read_resource, godot_write_resource)", () => {
+  describe("bridge-based tools (godot_import_asset, godot_read_resource, godot_write_resource, godot_create_resource)", () => {
     beforeEach(() => {
       mockBridge._setConnected(true);
     });
@@ -380,6 +503,35 @@ describe("file-tools", () => {
       expect(mockBridge._getCalls()[0].method).toBe("resource.write");
       const params = mockBridge._getCalls()[0].params as Record<string, unknown>;
       expect(params.path).toBe("res://mat.tres");
+    });
+
+    it("godot_create_resource sends resource.create with path, type, and properties", async () => {
+      mockBridge._setResponse("resource.create", {
+        success: true,
+        path: "res://new_style.tres",
+        type: "StyleBoxFlat",
+        properties_applied: ["bg_color"],
+      });
+      const result = await mockServer.callTool("godot_create_resource", {
+        path: "res://new_style.tres",
+        type: "StyleBoxFlat",
+        properties: { bg_color: { r: 1, g: 0, b: 0, a: 1 } },
+      });
+      expect(result.isError).toBeUndefined();
+      expect(mockBridge._getCalls()[0].method).toBe("resource.create");
+      const params = mockBridge._getCalls()[0].params as Record<string, unknown>;
+      expect(params.path).toBe("res://new_style.tres");
+      expect(params.type).toBe("StyleBoxFlat");
+      expect(params.properties).toEqual({ bg_color: { r: 1, g: 0, b: 0, a: 1 } });
+    });
+
+    it("godot_create_resource marks a bridge error result as isError", async () => {
+      mockBridge._setResponse("resource.create", { error: "Unknown or non-Resource type: Nope" });
+      const result = await mockServer.callTool("godot_create_resource", {
+        path: "res://x.tres",
+        type: "Nope",
+      });
+      expect(result.isError).toBe(true);
     });
 
     it("godot_import_asset returns error when bridge throws", async () => {

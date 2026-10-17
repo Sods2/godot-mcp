@@ -1,4 +1,5 @@
 import * as net from "node:net";
+import { outdatedAddonMessage } from "./addon-version.js";
 
 const INITIAL_RETRY_MS = 1000;
 const MAX_RETRY_MS = 30000;
@@ -12,10 +13,13 @@ interface PendingRequest {
   resolve: (value: any) => void;
   reject: (reason: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+  method: string;
 }
 
 export class BridgeConnection {
   private socket: net.Socket | null = null;
+  // Socket whose TCP connect is still in flight; at most one at a time.
+  private connecting: net.Socket | null = null;
   private retryMs = INITIAL_RETRY_MS;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private closing = false;
@@ -55,8 +59,19 @@ export class BridgeConnection {
         this.pending.delete(id);
         reject(new Error(`Request timeout for method: ${method}`));
       }, REQUEST_TIMEOUT_MS);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, method });
     });
+  }
+
+  /** Skip any pending backoff and try to reconnect immediately (e.g. after an editor restart). */
+  reconnectNow(): void {
+    if (this.closing || this.connected) return;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    this.retryMs = INITIAL_RETRY_MS;
+    if (!this.socket && !this.connecting) this.attempt();
   }
 
   close(): void {
@@ -65,6 +80,10 @@ export class BridgeConnection {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
+    if (this.connecting) {
+      this.connecting.destroy();
+      this.connecting = null;
+    }
     if (this.socket) {
       this.socket.destroy();
       this.socket = null;
@@ -72,25 +91,33 @@ export class BridgeConnection {
   }
 
   private attempt(): void {
-    if (this.closing) return;
+    if (this.closing || this.connecting || this.socket) return;
     const socket = net.createConnection({
       host: this.host,
       port: this.port,
     });
+    this.connecting = socket;
     socket.on("connect", () => {
+      if (this.connecting === socket) this.connecting = null;
       this.socket = socket;
       this.retryMs = INITIAL_RETRY_MS;
     });
-    socket.on("data", (chunk) => this.onData(chunk));
+    socket.on("data", (chunk) => {
+      if (this.socket === socket) this.onData(chunk);
+    });
     socket.on("close", () => {
-      this.socket = null;
+      // Ignore sockets that were superseded or closed by close(): only the
+      // current one may clear state and schedule a reconnect.
+      if (this.socket === socket) this.socket = null;
+      else if (this.connecting === socket) this.connecting = null;
+      else return;
       this.scheduleReconnect();
     });
     socket.on("error", () => socket.destroy());
   }
 
   private scheduleReconnect(): void {
-    if (this.closing) return;
+    if (this.closing || this.retryTimer) return;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
       this.attempt();
@@ -123,7 +150,14 @@ export class BridgeConnection {
         if (pending) {
           this.pending.delete(response.id);
           clearTimeout(pending.timer);
-          if (response.error) pending.reject(new Error(response.error.message));
+          if (response.error) {
+            // -32601 = method not found: the addon predates this command.
+            const msg =
+              response.error.code === -32601
+                ? outdatedAddonMessage(`bridge does not know command "${pending.method}" (${response.error.message})`)
+                : response.error.message;
+            pending.reject(new Error(msg));
+          }
           else pending.resolve(response.result);
         }
       } catch {

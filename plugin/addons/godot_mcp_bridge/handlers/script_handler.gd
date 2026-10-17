@@ -140,3 +140,45 @@ func get_script_for_node(editor_interface: EditorInterface, params: Dictionary) 
 	if script == null:
 		return {"script": null}
 	return {"script_path": script.resource_path, "class_name": script.get_global_name()}
+
+## Validate a GDScript file inside the running editor. Unlike `--check-only`,
+## this sees the editor's global names (autoloads, class_name types) and needs
+## no project lock. The file on disk is compiled into a throwaway GDScript so
+## the cached resource and any open editor tabs are untouched.
+func validate_script(_editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var path: String = params.get("path", "")
+	if path.is_empty():
+		return {"error": "Missing 'path'"}
+	if not path.begins_with("res://"):
+		path = "res://" + path.trim_prefix("/")
+	if not FileAccess.file_exists(path):
+		return {"error": "Script not found: " + path}
+	if not path.ends_with(".gd"):
+		return {"error": "Only .gd scripts can be validated via the editor: " + path}
+
+	var source := FileAccess.get_file_as_string(path)
+	var script := GDScript.new()
+	script.source_code = source
+
+	var logger = null
+	if ClassDB.class_exists("Logger") and OS.has_method("add_logger"):
+		var logger_script = load("res://addons/godot_mcp_bridge/handlers/validate_logger.gd")
+		if logger_script:
+			logger = logger_script.new()
+			OS.call("add_logger", logger)
+
+	var err := script.reload()
+
+	var errors: Array[String] = []
+	if logger:
+		OS.call("remove_logger", logger)
+		errors = logger.messages
+
+	return {
+		"path": path,
+		"valid": err == OK,
+		"error_code": err,
+		"error": "" if err == OK else error_string(err),
+		"errors": errors,
+		"details_captured": logger != null,
+	}

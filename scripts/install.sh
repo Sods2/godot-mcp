@@ -37,9 +37,13 @@ mkdir -p "$DEST"
 cp -r "$PROJECT_DIR/build" "$DEST/"
 cp -r "$PROJECT_DIR/scripts" "$DEST/"
 cp "$PROJECT_DIR/package.json" "$DEST/"
+# Copy the lockfile so the install uses the same resolved tree as the repo.
+# Without it, a fresh `npm install` can hit a cryptic "edgesOut" crash on
+# some npm versions; `npm ci` also requires the lockfile.
+cp "$PROJECT_DIR/package-lock.json" "$DEST/"
 # Don't let `set -e` abort on an npm failure here — we want the verification
 # below to run and print an actionable message instead of a raw crash.
-cd "$DEST" && npm install --omit=dev || true
+cd "$DEST" && npm ci --omit=dev || true
 
 # Verify the dependency install actually landed. If npm failed or was
 # interrupted, the copy above still leaves build/ and package.json in place,
@@ -49,7 +53,7 @@ if [ ! -d "$DEST/node_modules/@modelcontextprotocol/sdk" ]; then
   echo "" >&2
   echo "ERROR: dependency install failed — $DEST/node_modules is incomplete." >&2
   echo "  Re-run with a current npm (>=10):" >&2
-  echo "    cd \"$DEST\" && npm install --omit=dev" >&2
+  echo "    cd \"$DEST\" && npm ci --omit=dev" >&2
   echo "  If npm crashes with an 'edgesOut' error, first: npm install -g npm@latest" >&2
   exit 1
 fi

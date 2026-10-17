@@ -17,17 +17,35 @@ function errorResult(e: unknown) {
   };
 }
 
+/** Convert a bridge result that signals failure (error string, success:false, applied:false) into an MCP error. */
+function bridgeResult(result: unknown) {
+  const r = (result ?? {}) as Record<string, unknown>;
+  const failed =
+    (typeof r.error === "string" && r.error !== "") ||
+    r.success === false ||
+    r.applied === false;
+  if (!failed) return textResult(JSON.stringify(result, null, 2));
+  const msg =
+    typeof r.error === "string" && r.error !== ""
+      ? r.error
+      : `Operation failed${r.property ? ` for property '${String(r.property)}'` : ""} (bridge reported ${r.applied === false ? "applied:false" : "success:false"})`;
+  return {
+    content: [{ type: "text" as const, text: `Error: ${msg}\n${JSON.stringify(result, null, 2)}` }],
+    isError: true,
+  };
+}
+
 export function registerSceneTools(server: McpServer, bridge: BridgeConnection) {
   server.tool(
     "godot_add_node",
-    "Add a node to the current scene (requires editor plugin)",
+    "Add a node to the current scene (requires editor plugin). For Node-typed exports in properties, paths are tried relative to the new node first, then the scene root. If properties include script, it is applied before other keys so script @exports are typed correctly.",
     {
       project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
       scene_path: z.string().describe("Path to the scene file relative to project"),
       node_type: z.string().describe("Godot node type (e.g. Sprite2D, CharacterBody2D)"),
       node_name: z.string().describe("Name for the new node"),
       parent_path: z.string().optional().describe("Parent node path (default: root '.')"),
-      properties: z.string().optional().describe("JSON object of properties to set on the node"),
+      properties: z.string().optional().describe("JSON object of properties to set on the node. Include script before relying on script @exports. Node export paths: owner-relative first, then scene-root-relative."),
     },
     async ({ node_type, node_name, parent_path, properties }) => {
       if (!bridge.connected) {
@@ -69,11 +87,11 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
 
   server.tool(
     "godot_set_property",
-    "Set a property on a node in the current scene (requires editor plugin)",
+    "Set a property on a node in the current scene (requires editor plugin). For Node-typed exports, paths are tried relative to the property owner first, then the edited scene root.",
     {
       node_path: z.string().describe("Node path (e.g. 'Player/Sprite2D')"),
       property: z.string().describe("Property name (e.g. 'position', 'texture')"),
-      value: z.any().describe("Property value"),
+      value: z.any().describe("Property value. For Node exports: path relative to the node, or to the scene root as fallback. For Resource properties: a res:// path (saved as ExtResource), or an inline sub-resource like {type:'CircleShape2D', radius:20} (saved as SubResource)."),
     },
     async ({ node_path, property, value }) => {
       if (!bridge.connected) {
@@ -85,6 +103,37 @@ export function registerSceneTools(server: McpServer, bridge: BridgeConnection) 
           property,
           value,
         });
+        return bridgeResult(result);
+      } catch (e) {
+        return errorResult(e);
+      }
+    }
+  );
+
+  server.tool(
+    "godot_instance_scene",
+    "Instance a PackedScene as a child of a node in the currently edited scene (requires editor plugin). Saves as instance=ExtResource rather than inlining children.",
+    {
+      scene_path: z.string().describe("Path to the PackedScene to instance (e.g. res://level2.tscn)"),
+      parent_path: z.string().optional().describe("Parent node path in the edited scene (default: root '.')"),
+      node_name: z.string().optional().describe("Name for the instance root (default: packed scene root name)"),
+    },
+    async ({ scene_path, parent_path, node_name }) => {
+      if (!bridge.connected) {
+        return { ...textResult(NOT_CONNECTED_MSG), isError: true };
+      }
+      try {
+        const result = await bridge.send<Record<string, unknown>>("scene.instance_scene", {
+          scene_path,
+          parent: parent_path ?? ".",
+          name: node_name ?? "",
+        });
+        if (result && typeof result === "object" && "error" in result) {
+          return {
+            content: [{ type: "text" as const, text: `Error: ${String(result.error)}` }],
+            isError: true,
+          };
+        }
         return textResult(JSON.stringify(result, null, 2));
       } catch (e) {
         return errorResult(e);

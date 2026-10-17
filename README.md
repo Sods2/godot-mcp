@@ -5,7 +5,7 @@
 
 A Model Context Protocol (MCP) server that gives AI assistants full integration with the Godot game engine IDE. Interact with live editor state, parse and modify scene files, run projects, capture screenshots, debug with breakpoints, profile performance, and more.
 
-**77 tools** across 15 categories, covering the full Godot development workflow.
+**84 tools** across 16 categories, covering the full Godot development workflow.
 
 ## Features
 
@@ -24,7 +24,7 @@ A Model Context Protocol (MCP) server that gives AI assistants full integration 
 - **GDScript validation** — Validate scripts using Godot's `--check-only` flag
 - **Testing** — Detect, list, create, and run GDScript tests with GUT, GdUnit4, or the built-in runner
 - **Resource UIDs** — Look up and update Godot 4.4+ resource UIDs
-- **Autoloads** — List and add autoload singletons
+- **Autoloads** — List, add and remove autoload singletons
 - **Auto-detects Godot** — Finds the Godot executable automatically on macOS, Windows, and Linux (including Steam installs)
 
 ## Architecture
@@ -99,13 +99,13 @@ Create or update `.mcp.json` in your Claude project root:
 }
 ```
 
-> **Setting `GODOT_PATH`:** The install script auto-detects Godot and pre-fills this value. If it can't find Godot, or if you install to a custom location, set the path explicitly. The server checks `GODOT_PATH`, then `godot` on `$PATH`, then these standard locations:
+> **Setting `GODOT_PATH`:** The install script auto-detects Godot and pre-fills this value. If it can't find Godot, or if you install to a custom location, set the path explicitly. The server checks `GODOT_PATH`, then `godot`, `godot4` and `Godot_v4*` on `$PATH`, then these standard locations:
 >
 > | Platform | Typical paths |
 > |----------|--------------|
-> | macOS | `/Applications/Godot.app/Contents/MacOS/Godot` |
-> | Linux | `/usr/bin/godot`, `~/.local/bin/godot` |
-> | Windows | `C:\Program Files\Godot\Godot.exe` |
+> | macOS | `/Applications/Godot*.app`, `~/Applications/Godot*.app`, Homebrew, Steam |
+> | Linux | `/usr/bin`, `/usr/local/bin`, `~/.local/bin`, Flatpak (`org.godotengine.Godot`), Snap, Steam |
+> | Windows | `Program Files\Godot*`, `%LOCALAPPDATA%\Programs`, Scoop, Steam, `Downloads\Godot_v4*.exe` |
 >
 > On macOS the executable is inside the `.app` bundle at `Godot.app/Contents/MacOS/Godot`.
 
@@ -150,7 +150,8 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `godot_get_autoloads` | List all autoload singletons configured in the project | `project_path` |
-| `godot_add_autoload` | Add an autoload singleton to the project | `name`, `script_path` |
+| `godot_add_autoload` | Add an autoload singleton. Goes through the editor when the bridge is connected (so the editor's settings can't overwrite it), else edits `project.godot`. Fails if the script is missing or the name exists unless `overwrite` | `name`, `script_path`, `overwrite` |
+| `godot_remove_autoload` | Remove an autoload singleton (editor bridge, or `project.godot` fallback) | `name` |
 
 ### Editor Control
 
@@ -159,6 +160,9 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | `godot_launch_editor` | Launch the Godot editor for a project | `project_path` |
 | `godot_editor_status` | Get editor connection status, open scenes, playing state | — |
 | `godot_open_scene` | Open a scene file in the editor | `scene_path` |
+| `godot_reload_scene` | Reload an open scene from disk (Scene → Reload Saved Scene) | `scene_path?` |
+| `godot_close_scene` | Close an open scene tab (discards its unsaved changes) | `scene_path` |
+| `godot_reload_project` | Restart the editor to reload the project; waits for the bridge to reconnect | `save`, `wait_for_reconnect`, `timeout_sec` |
 
 ### Scene Editing (file-based, no editor required)
 
@@ -178,6 +182,7 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | `godot_get_selected_nodes` | Get the currently selected nodes | — |
 | `godot_get_node_properties` | Get all properties of a node by path | `path` |
 | `godot_add_node` | Add a node via the live editor | `node_type`, `node_name`, `parent_path`, `properties` (JSON) |
+| `godot_instance_scene` | Instance a PackedScene as a child (saved as `instance=ExtResource`) | `scene_path`, `parent_path`, `node_name` |
 | `godot_remove_node` | Remove a node via the live editor | `path` |
 | `godot_reparent_node` | Move a node to a new parent | `path`, `new_parent` |
 | `godot_rename_node` | Rename a node in the current scene | `path`, `new_name` |
@@ -190,7 +195,7 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `godot_validate_script` | Validate a GDScript file using `--check-only` | `script_path`, `include_warnings` |
+| `godot_validate_script` | Validate a GDScript file. With the editor bridge connected it compiles the script inside the editor (autoloads and `class_name` globals resolve, no project lock; detailed errors need Godot 4.5+). Without the bridge (or with an older addon) it falls back to headless `--check-only`, which needs the editor closed and reports autoload names as "Identifier not found" | `script_path`, `include_warnings` |
 | `godot_get_current_script` | Get the open script, source, and cursor position | — |
 | `godot_get_open_scripts` | List all open scripts | — |
 | `godot_get_selected_code` | Get selected text in the script editor | — |
@@ -207,6 +212,17 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | `godot_connect_signal` | Connect a signal to a method on another node | `from_path`, `signal_name`, `to_path`, `method`, `flags` |
 | `godot_disconnect_signal` | Disconnect a signal connection | `from_path`, `signal_name`, `to_path`, `method` |
 | `godot_list_connections` | List all signal connections on a node | `path` |
+
+### Input Map
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `godot_list_input_actions` | List Input Map actions with deadzone and events | `include_builtin` |
+| `godot_add_input_action` | Add an action (or append events) and save project.godot | `action`, `deadzone`, `events`, `overwrite` |
+| `godot_add_input_event` | Append events to an existing action | `action`, `event`, `events` |
+| `godot_remove_input_action` | Remove an action and save project.godot | `action` |
+
+Events: `{type:"key", physical_keycode|keycode, shift?, ctrl?, alt?, meta?}`, `{type:"mouse_button", button_index}`, `{type:"joypad_button", button_index}`, `{type:"joypad_motion", axis, axis_value}`. Edits go through the editor's `ProjectSettings` and require the editor plugin.
 
 ### Animation
 
@@ -225,9 +241,10 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 | `godot_delete_file` | Delete a file from the project | `path` |
 | `godot_rename_file` | Rename or move a file | `path`, `new_path` |
 | `godot_list_resources` | List resource files, optionally filtered by extension | `path`, `extensions` |
-| `godot_import_asset` | Reimport assets in the editor | `paths` (array) |
+| `godot_import_asset` | Scan then reimport assets (including newly added files) | `paths` (array) |
 | `godot_read_resource` | Read a resource's properties via the editor | `path` |
 | `godot_write_resource` | Write properties to a resource via the editor | `path`, `properties` |
+| `godot_create_resource` | Create a new `.tres`/`.res` of a given type | `path`, `type`, `properties` |
 | `godot_get_uid` | Get the UID for a resource file (Godot 4.4+) | `file_path` |
 | `godot_update_uids` | Update all resource UIDs in the project | `project_path` |
 
@@ -243,9 +260,6 @@ The plugin starts a TCP server on `127.0.0.1:6008` when enabled.
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `godot_run_project` | Run the project in debug mode | `project_path`, `scene` |
-| `godot_stop_project` | Stop the running project | — |
-| `godot_get_debug_output` | Get stdout/stderr from the running project | — |
 | `godot_run_scene` | Run a scene (via editor bridge or process spawn) | `project_path`, `scene` |
 | `godot_stop_scene` | Stop the running scene | — |
 | `godot_get_output` | Get scene output with incremental polling | `since_line` (return lines after this index) |

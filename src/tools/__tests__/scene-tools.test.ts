@@ -16,6 +16,42 @@ describe("scene-tools", () => {
       registerSceneTools(mockServer.server, mockBridge);
     });
 
+    describe("godot_set_property failures", () => {
+      const args = { node_path: "Player", property: "position", value: 1 };
+      it("returns isError when bridge reports success:false", async () => {
+        mockBridge._setResponse("inspector.set_property", {
+          success: false,
+          property: "position",
+          error: "Property did not accept the value",
+        });
+        const result = await mockServer.callTool("godot_set_property", args);
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("Property did not accept the value");
+      });
+      it("returns isError when bridge reports applied:false", async () => {
+        mockBridge._setResponse("inspector.set_property", { applied: false, property: "position" });
+        const result = await mockServer.callTool("godot_set_property", args);
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("position");
+      });
+      it("returns isError for node not found / no scene (error-only result)", async () => {
+        mockBridge._setResponse("inspector.set_property", { error: "Node not found: Player" });
+        const result = await mockServer.callTool("godot_set_property", args);
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("Node not found: Player");
+      });
+      it("returns isError when bridge throws", async () => {
+        mockBridge._setError("inspector.set_property", new Error("boom"));
+        const result = await mockServer.callTool("godot_set_property", args);
+        expect(result.isError).toBe(true);
+      });
+      it("succeeds normally", async () => {
+        mockBridge._setResponse("inspector.set_property", { success: true, property: "position", value: "(1, 1)" });
+        const result = await mockServer.callTool("godot_set_property", args);
+        expect(result.isError).toBeUndefined();
+      });
+    });
+
     describe("godot_add_node", () => {
       it("sends scene.add_node with required params and defaults", async () => {
         mockBridge._setResponse("scene.add_node", {
@@ -101,6 +137,54 @@ describe("scene-tools", () => {
       });
     });
 
+    describe("godot_instance_scene", () => {
+      it("sends scene.instance_scene with scene_path, parent, and name", async () => {
+        mockBridge._setResponse("scene.instance_scene", {
+          success: true,
+          path: "Lvl",
+          name: "Lvl",
+          scene_path: "res://level2.tscn",
+        });
+        const result = await mockServer.callTool("godot_instance_scene", {
+          scene_path: "res://level2.tscn",
+          parent_path: ".",
+          node_name: "Lvl",
+        });
+        expect(result.isError).toBeUndefined();
+        expect(mockBridge._getCalls()[0].method).toBe("scene.instance_scene");
+        const params = mockBridge._getCalls()[0].params as Record<string, unknown>;
+        expect(params.scene_path).toBe("res://level2.tscn");
+        expect(params.parent).toBe(".");
+        expect(params.name).toBe("Lvl");
+      });
+
+      it("defaults parent to '.' and name to empty", async () => {
+        mockBridge._setResponse("scene.instance_scene", { success: true, path: "Level2" });
+        await mockServer.callTool("godot_instance_scene", {
+          scene_path: "res://level2.tscn",
+        });
+        const params = mockBridge._getCalls()[0].params as Record<string, unknown>;
+        expect(params.parent).toBe(".");
+        expect(params.name).toBe("");
+      });
+
+      it("marks a bridge error result as isError", async () => {
+        mockBridge._setResponse("scene.instance_scene", { error: "Scene file not found: res://x.tscn" });
+        const result = await mockServer.callTool("godot_instance_scene", {
+          scene_path: "res://x.tscn",
+        });
+        expect(result.isError).toBe(true);
+      });
+
+      it("returns error when bridge throws", async () => {
+        mockBridge._setError("scene.instance_scene", new Error("timeout"));
+        const result = await mockServer.callTool("godot_instance_scene", {
+          scene_path: "res://level2.tscn",
+        });
+        expect(result.isError).toBe(true);
+      });
+    });
+
     describe("godot_save_scene", () => {
       it("sends scene.save when connected", async () => {
         mockBridge._setResponse("scene.save", { success: true, path: "res://main.tscn" });
@@ -122,6 +206,15 @@ describe("scene-tools", () => {
       mockServer = createMockServer();
       mockBridge = createMockBridge({ connected: false });
       registerSceneTools(mockServer.server, mockBridge);
+    });
+
+    it("godot_instance_scene returns error with guidance message", async () => {
+      const result = await mockServer.callTool("godot_instance_scene", {
+        scene_path: "res://level2.tscn",
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(NOT_CONNECTED_SNIPPET);
+      expect(mockBridge._getCalls()).toHaveLength(0);
     });
 
     it("godot_add_node returns error with guidance message", async () => {

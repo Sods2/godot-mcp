@@ -23,6 +23,21 @@ function openScenePaths(openScenes: string[] | undefined): string[] {
   return (openScenes ?? []).filter((scenePath) => scenePath.length > 0);
 }
 
+/**
+ * Resolve the .tscn being edited. Prefer the bridge's `edited_scene`
+ * (from get_edited_scene_root()) — open_scenes[0] is merely the first tab
+ * and points at the wrong file when several scenes are open. Fall back to
+ * open_scenes only for older plugins that don't report edited_scene, and
+ * only when exactly one scene is open (otherwise it's ambiguous).
+ */
+export function editedScenePath(status: { open_scenes?: string[]; edited_scene?: string }): string | null {
+  if (typeof status.edited_scene === "string") {
+    return status.edited_scene.length > 0 ? status.edited_scene : null;
+  }
+  const open = openScenePaths(status.open_scenes);
+  return open.length === 1 ? open[0] : null;
+}
+
 async function persistConnection(
   bridge: BridgeConnection,
   signal: string,
@@ -33,14 +48,13 @@ async function persistConnection(
   remove: boolean
 ): Promise<string> {
   // Get the currently open scene from editor
-  const status = await bridge.send<{ open_scenes?: string[]; project_path?: string }>(
+  const status = await bridge.send<{ open_scenes?: string[]; edited_scene?: string; project_path?: string }>(
     "editor.status",
     {}
   );
-  const openScenes = openScenePaths(status.open_scenes);
-  if (openScenes.length === 0) return "Runtime connection only — no open scene found for persistence";
+  const scenePath = editedScenePath(status);
+  if (!scenePath) return "Runtime connection only — no saved edited scene found for persistence";
 
-  const scenePath = openScenes[0];
   // Prefer the project root reported by the live editor over cwd/env
   // auto-detection: the MCP server rarely runs from inside the project, so
   // resolveProjectPath() would otherwise fail and the connection would never
@@ -151,10 +165,12 @@ export function registerSignalTools(
 
         // Merge with TSCN file to catch connections filtered out by the runtime
         try {
-          const status = await bridge.send<{ open_scenes?: string[] }>("editor.status", {});
-          const openScenes = openScenePaths(status.open_scenes);
-          if (openScenes.length > 0) {
-            const filePath = resolveResPath(resolveProjectPath(), openScenes[0]);
+          const status = await bridge.send<{ open_scenes?: string[]; edited_scene?: string; project_path?: string }>("editor.status", {});
+          const scenePath = editedScenePath(status);
+          if (scenePath) {
+            const projectDir =
+              status.project_path && status.project_path.length > 0 ? status.project_path : resolveProjectPath();
+            const filePath = resolveResPath(projectDir, scenePath);
             const content = await readFile(filePath, "utf-8");
             const scene = _parser.parse(content);
             for (const tscnConn of scene.connections) {

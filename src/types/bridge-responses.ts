@@ -2,7 +2,11 @@
 export interface EditorStatusResponse {
   connected: true;
   open_scenes: string[];
+  /** res:// path of the scene being edited (active tab); "" if none/unsaved. */
+  edited_scene?: string;
   is_playing: boolean;
+  /** Addon version from plugin.cfg; absent on addons predating the handshake. */
+  addon_version?: string;
 }
 
 // Scene
@@ -57,9 +61,12 @@ export interface GetPropertiesResponse {
 }
 
 export interface SetPropertyResponse {
-  success: true;
-  property: string;
-  value: string;
+  success: boolean;
+  applied?: boolean;
+  property?: string;
+  value?: string;
+  requested?: string;
+  error?: string;
 }
 
 // Script
@@ -225,6 +232,8 @@ export interface CreateAnimationResponse {
 export interface ImportAssetResponse {
   success: true;
   paths: string[];
+  /** Paths that were requested but missing or not res:// (partial success). */
+  missing?: string[];
 }
 
 export interface ReadResourceResponse {
@@ -235,6 +244,23 @@ export interface ReadResourceResponse {
 
 export interface WriteResourceResponse {
   success: true;
+}
+
+export interface CreateResourceResponse {
+  success: true;
+  path: string;
+  type: string;
+  properties_applied?: string[];
+  errors?: string[];
+  error?: string;
+}
+
+export interface InstanceSceneResponse {
+  success: true;
+  path: string;
+  name: string;
+  scene_path: string;
+  scene_file_path?: string;
 }
 
 // Debug
@@ -263,3 +289,12 @@ export interface ProfilerFrame { [key: string]: unknown; }
 export interface StartProfilerResponse { success: true; }
 export interface StopProfilerResponse { success: true; frames: ProfilerFrame[]; }
 export interface GetProfilerDataResponse { frames: ProfilerFrame[]; }
+
+export interface ValidateScriptResponse {
+  path?: string;
+  valid?: boolean;
+  error_code?: number;
+  error?: string;
+  errors?: string[];
+  details_captured?: boolean;
+}

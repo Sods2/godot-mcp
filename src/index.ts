@@ -8,9 +8,11 @@ import {
   getProjectInfo,
   getAutoloads,
   addAutoload,
+  removeAutoload,
 } from "./tools/project-tools.js";
 import { getUid, updateProjectUids } from "./tools/uid-tools.js";
 import { bridge } from "./connection.js";
+import { withAddonWarning } from "./addon-warning.js";
 import { registerEditorTools } from "./tools/editor-tools.js";
 import { registerScriptTools } from "./tools/script-tools.js";
 import { registerScreenshotTools } from "./tools/screenshot-tools.js";
@@ -23,6 +25,7 @@ import { registerAnimationTools } from "./tools/animation-tools.js";
 import { registerExportTools } from "./tools/export-tools.js";
 import { registerDebugTools } from "./tools/debug-tools.js";
 import { registerProfilerTools } from "./tools/profiler-tools.js";
+import { registerInputMapTools } from "./tools/input-map-tools.js";
 import { resolveProjectPath } from "./project-utils.js";
 
 const server = new McpServer({
@@ -195,19 +198,21 @@ server.tool(
 
 // --- Live editor tools (require plugin connection) ---
 
-registerEditorTools(server, bridge);
-registerScriptTools(server, bridge);
-registerScreenshotTools(server, bridge);
-registerSignalTools(server, bridge);
-registerAnimationTools(server, bridge);
-registerDebugTools(server, bridge);
-registerProfilerTools(server, bridge);
+const bridgeServer = withAddonWarning(server, bridge);
+registerEditorTools(bridgeServer, bridge);
+registerScriptTools(bridgeServer, bridge);
+registerScreenshotTools(bridgeServer, bridge);
+registerSignalTools(bridgeServer, bridge);
+registerAnimationTools(bridgeServer, bridge);
+registerDebugTools(bridgeServer, bridge);
+registerProfilerTools(bridgeServer, bridge);
+registerInputMapTools(bridgeServer, bridge);
 
 // --- Hybrid tools (plugin + file fallback) ---
 
-registerSceneTools(server, bridge);
-registerFileTools(server, bridge, godotPath);
-registerRunTools(server, processManager, bridge, godotPath);
+registerSceneTools(bridgeServer, bridge);
+registerFileTools(bridgeServer, bridge, godotPath);
+registerRunTools(bridgeServer, processManager, bridge, godotPath);
 registerTestTools(server, godotPath);
 registerExportTools(server, godotPath);
 
@@ -237,24 +242,50 @@ server.tool(
 
 server.tool(
   "godot_add_autoload",
-  "Add an autoload singleton to a Godot project",
+  "Add an autoload singleton to a Godot project. Routed through the editor when the bridge is connected (so the editor's settings don't overwrite it later); otherwise edits project.godot directly. Fails if the script is missing or the name exists (unless overwrite=true)",
   {
     project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
     name: z.string().describe("Autoload name (e.g. 'GameManager')"),
     script_path: z
       .string()
       .describe("res:// path to the script (e.g. 'res://src/game_manager.gd')"),
+    overwrite: z.boolean().optional().describe("Replace an existing autoload with the same name (default false)"),
   },
-  async ({ project_path, name, script_path }) => {
+  async ({ project_path, name, script_path, overwrite }) => {
     try {
       const projectDir = resolveProjectPath(project_path);
-      await addAutoload(projectDir, name, script_path);
+      const { via } = await addAutoload(projectDir, name, script_path, { overwrite, bridge });
       return {
         content: [
           {
             type: "text",
-            text: `Added autoload "${name}" -> ${script_path}`,
+            text: `Added autoload "${name}" -> ${script_path} (via ${via === "bridge" ? "editor" : "project.godot"})`,
           },
+        ],
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "godot_remove_autoload",
+  "Remove an autoload singleton from a Godot project (via the editor when the bridge is connected, otherwise by editing project.godot)",
+  {
+    project_path: z.string().optional().describe("Path to the Godot project directory (auto-detected if omitted)"),
+    name: z.string().describe("Autoload name to remove"),
+  },
+  async ({ project_path, name }) => {
+    try {
+      const projectDir = resolveProjectPath(project_path);
+      const { via } = await removeAutoload(projectDir, name, { bridge });
+      return {
+        content: [
+          { type: "text", text: `Removed autoload "${name}" (via ${via === "bridge" ? "editor" : "project.godot"})` },
         ],
       };
     } catch (e) {

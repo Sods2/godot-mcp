@@ -54,13 +54,36 @@ func set_property(editor_interface: EditorInterface, params: Dictionary) -> Dict
 	# Determine the property's expected Variant type so a JSON value (e.g. a
 	# Dictionary {"x":1,"y":2} for a Vector2) is coerced to the real type before
 	# assignment. Prefer the declared type from the property list, falling back
-	# to the current value's type.
+	# to the current value's type. Hints distinguish Node exports (NodePath
+	# strings) from Resource/Script exports (res:// loads).
 	var target_type := typeof(old_value)
+	var target_hint := PROPERTY_HINT_NONE
+	var target_hint_string := ""
 	for prop in node.get_property_list():
 		if prop["name"] == prop_name:
 			target_type = int(prop["type"])
+			target_hint = int(prop["hint"])
+			target_hint_string = str(prop.get("hint_string", ""))
 			break
-	var coerced = _Coerce.coerce(prop_value, target_type)
+	var coerced = _Coerce.coerce(prop_value, target_type, target_hint, target_hint_string)
+	if target_type == TYPE_OBJECT and _Coerce.last_error != "":
+		return {
+			"success": false,
+			"property": prop_name,
+			"error": _Coerce.last_error,
+			"requested": str(prop_value),
+			"value": str(old_value)
+		}
+	var resolved := _Coerce.resolve_for_assignment(coerced, node, target_type, root)
+	if not resolved["ok"]:
+		return {
+			"success": false,
+			"property": prop_name,
+			"error": resolved["error"],
+			"requested": str(prop_value),
+			"value": str(old_value)
+		}
+	coerced = resolved["value"]
 
 	var undo_redo := editor_interface.get_editor_undo_redo()
 	undo_redo.create_action("Set Property: " + prop_name)
@@ -82,10 +105,76 @@ func set_property(editor_interface: EditorInterface, params: Dictionary) -> Dict
 	return {"success": true, "property": prop_name, "value": str(actual)}
 
 func import_asset(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	# Newly copied files are invisible to reimport_files until the editor
+	# filesystem has scanned (or update_file has registered) them. Scan first,
+	# wait for the scan/import to finish, then reimport and verify.
 	var paths: Array = params.get("paths", [])
-	var packed := PackedStringArray(paths)
-	editor_interface.get_resource_filesystem().reimport_files(packed)
-	return {"success": true, "paths": paths}
+	if paths.is_empty():
+		return {"error": "No paths provided"}
+
+	var fs := editor_interface.get_resource_filesystem()
+	var missing: Array = []
+	var valid_paths: Array = []
+	for path in paths:
+		var p: String = str(path)
+		if not p.begins_with("res://"):
+			missing.append(p + " (must use res://)")
+			continue
+		if not FileAccess.file_exists(p):
+			missing.append(p)
+			continue
+		valid_paths.append(p)
+		# Register newly added files in the editor filesystem cache.
+		fs.update_file(p)
+
+	if valid_paths.is_empty():
+		return {"success": false, "error": "No valid asset paths found", "missing": missing}
+
+	# Discover new files and let any queued imports settle before reimport.
+	if not fs.is_scanning():
+		fs.scan()
+	var tree := Engine.get_main_loop() as SceneTree
+	var frames := 0
+	const MAX_WAIT_FRAMES := 600  # ~10s at 60fps
+	while tree != null and frames < MAX_WAIT_FRAMES and (fs.is_scanning() or fs.is_importing()):
+		await tree.process_frame
+		frames += 1
+
+	var packed := PackedStringArray()
+	for p in valid_paths:
+		packed.append(p)
+	# Docs: avoid reimport_files while an import is still in progress.
+	frames = 0
+	while tree != null and frames < MAX_WAIT_FRAMES and fs.is_importing():
+		await tree.process_frame
+		frames += 1
+	fs.reimport_files(packed)
+
+	# Verify rather than reporting blind success (repro_7: expect .import sidecars).
+	var imported: Array = []
+	var failed: Array = []
+	for p in valid_paths:
+		var sidecar: String = str(p) + ".import"
+		if FileAccess.file_exists(sidecar) or ResourceLoader.exists(p):
+			imported.append(p)
+		else:
+			failed.append(p)
+
+	if not failed.is_empty():
+		var err := {
+			"success": false,
+			"paths": valid_paths,
+			"imported": imported,
+			"error": "Import did not produce loadable assets for: %s. The editor may still be scanning — retry, or run Godot with --import." % ", ".join(PackedStringArray(failed)),
+		}
+		if not missing.is_empty():
+			err["missing"] = missing
+		return err
+
+	var result := {"success": true, "paths": valid_paths}
+	if not missing.is_empty():
+		result["missing"] = missing
+	return result
 
 func read_resource(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
 	var res_path: String = params.get("path", "")
@@ -113,14 +202,113 @@ func write_resource(editor_interface: EditorInterface, params: Dictionary) -> Di
 	if res == null:
 		return {"error": "Resource not found: " + res_path}
 	# Coerce JSON values to each property's real Variant type so composite types
-	# (Vector2, Color, …) are not silently dropped the way a raw Dictionary would.
+	# (Vector2, Color, …) and Resource/Script paths are not silently dropped.
 	var type_map := {}
+	var hint_map := {}
 	for prop in res.get_property_list():
 		type_map[prop["name"]] = int(prop["type"])
+		hint_map[prop["name"]] = {
+			"hint": int(prop["hint"]),
+			"hint_string": str(prop.get("hint_string", ""))
+		}
 	for key in properties:
 		var target_type: int = type_map.get(key, typeof(res.get(key)))
-		res.set(key, _Coerce.coerce(properties[key], target_type))
+		var h: Dictionary = hint_map.get(key, {"hint": PROPERTY_HINT_NONE, "hint_string": ""})
+		res.set(key, _Coerce.coerce(properties[key], target_type, int(h["hint"]), str(h["hint_string"])))
 	var err := ResourceSaver.save(res, res_path)
 	if err != OK:
 		return {"error": "Failed to save resource: " + str(err)}
 	return {"success": true}
+
+## Create a new Resource of the given type and save it to path (.tres/.res).
+## Unlike write_resource, this does not require the file to already exist.
+func create_resource(editor_interface: EditorInterface, params: Dictionary) -> Dictionary:
+	var res_path: String = str(params.get("path", ""))
+	var type_name: String = str(params.get("type", ""))
+	var properties = params.get("properties", {})
+	if res_path == "":
+		return {"error": "path is required"}
+	if type_name == "":
+		return {"error": "type is required"}
+	var ext: String = res_path.get_extension().to_lower()
+	if ext != "tres" and ext != "res":
+		return {"error": "Resource path must end in .tres or .res (got '.%s'): %s" % [ext, res_path]}
+	var existed: bool = FileAccess.file_exists(res_path)
+	if existed and not bool(params.get("overwrite", false)):
+		return {"error": "Resource already exists: %s (pass overwrite: true to replace)" % res_path}
+
+	var res: Resource = _instantiate_resource_type(type_name)
+	if res == null:
+		return {"error": "Unknown or non-Resource type: " + type_name}
+
+	var applied: Array = []
+	var errors: Array = []
+	if properties is Dictionary:
+		var type_map: Dictionary = {}
+		for prop in res.get_property_list():
+			type_map[prop["name"]] = int(prop["type"])
+		for key in properties:
+			var target_type: int = int(type_map.get(key, typeof(res.get(key))))
+			var coerced = _Coerce.coerce(properties[key], target_type)
+			res.set(key, coerced)
+			var actual = res.get(key)
+			if _Coerce.values_match(actual, coerced):
+				applied.append(key)
+			else:
+				errors.append(
+					"Property '%s' did not accept value (requested %s, holds %s)"
+					% [str(key), str(coerced), str(actual)]
+				)
+
+	var abs_path: String = ProjectSettings.globalize_path(res_path)
+	var base_dir: String = abs_path.get_base_dir()
+	if base_dir != "":
+		DirAccess.make_dir_recursive_absolute(base_dir)
+
+	var err: Error = ResourceSaver.save(res, res_path)
+	if err != OK:
+		return {
+			"success": false,
+			"error": "Failed to save resource: %s (%s)" % [error_string(err), str(err)],
+			"properties_applied": applied,
+			"errors": errors,
+		}
+
+	var fs: EditorFileSystem = editor_interface.get_resource_filesystem()
+	if fs != null:
+		fs.update_file(res_path)
+
+	var result: Dictionary = {
+		"success": true,
+		"path": res_path,
+		"type": res.get_class(),
+		"properties_applied": applied,
+	}
+	if errors.size() > 0:
+		result["errors"] = errors
+	return result
+
+
+func _instantiate_resource_type(type_name: String) -> Resource:
+	if ClassDB.class_exists(type_name):
+		if not ClassDB.is_parent_class(type_name, "Resource"):
+			return null
+		var obj = ClassDB.instantiate(type_name)
+		if obj is Resource:
+			return obj as Resource
+		return null
+	# Project-registered global classes (class_name Foo extends Resource).
+	for info in ProjectSettings.get_global_class_list():
+		if str(info.get("class", "")) != type_name:
+			continue
+		var script_path: String = str(info.get("path", ""))
+		if script_path == "":
+			continue
+		var script = load(script_path)
+		if script == null:
+			continue
+		var obj2 = script.new()
+		if obj2 is Resource:
+			return obj2 as Resource
+	return null
+

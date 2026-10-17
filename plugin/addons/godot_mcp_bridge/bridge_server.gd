@@ -1,6 +1,11 @@
 @tool
 extends Node
 
+# Identifies this editor process, so callers can tell a restarted editor from the old one.
+var _boot_id: String = "%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()]
+var _restart_pending: bool = false
+var _restart_fired: bool = false
+
 const _ProtocolScript = preload("res://addons/godot_mcp_bridge/protocol.gd")
 const _SceneHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/scene_handler.gd")
 const _InspectorHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/inspector_handler.gd")
@@ -10,6 +15,8 @@ const _ScreenshotHandlerScript = preload("res://addons/godot_mcp_bridge/handlers
 const _SignalHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/signal_handler.gd")
 const _AnimationHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/animation_handler.gd")
 const _DebugHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/debug_handler.gd")
+const _InputMapHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/input_map_handler.gd")
+const _AutoloadHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/autoload_handler.gd")
 const _ProfilerHandlerScript = preload("res://addons/godot_mcp_bridge/handlers/profiler_handler.gd")
 
 var editor_interface: EditorInterface
@@ -29,6 +36,8 @@ var _signal_handler
 var _animation_handler
 var _debug_handler
 var _profiler_handler
+var _input_map_handler
+var _autoload_handler
 var _debugger_ref = null
 
 # Deferred responses: Array of {id, type, frames_waited, extra}
@@ -55,6 +64,8 @@ func _ensure_handlers() -> void:
 	_screenshot_handler = _ScreenshotHandlerScript.new()
 	_signal_handler = _SignalHandlerScript.new()
 	_animation_handler = _AnimationHandlerScript.new()
+	_input_map_handler = _InputMapHandlerScript.new()
+	_autoload_handler = _AutoloadHandlerScript.new()
 
 func set_debugger(debugger) -> void:
 	_debug_handler = _DebugHandlerScript.new(debugger)
@@ -189,12 +200,31 @@ func _handle_message(msg: Dictionary) -> void:
 			result = _scene_handler.get_selected(editor_interface)
 		"scene.add_node":
 			result = _scene_handler.add_node(editor_interface, params)
+		"scene.instance_scene":
+			result = _scene_handler.instance_scene(editor_interface, params)
 		"scene.remove_node":
 			result = _scene_handler.remove_node(editor_interface, params)
 		"scene.reparent_node":
 			result = _scene_handler.reparent_node(editor_interface, params)
 		"scene.open":
 			result = _scene_handler.open_scene(editor_interface, params)
+		"scene.reload":
+			result = _scene_handler.reload_scene(editor_interface, params)
+		"scene.close":
+			result = _scene_handler.close_scene(editor_interface, params)
+		"editor.reload_project":
+			result = _scene_handler.prepare_reload_project(editor_interface, params)
+			if result.get("success", false):
+				if _restart_pending:
+					result = {"error": "An editor restart is already pending"}
+				else:
+					_restart_pending = true
+					result["boot_id"] = _boot_id
+					# Reply first, then restart once the response has gone out. Scenes are
+					# already saved/discarded above, so restart_editor(false) never opens a
+					# save progress task or a "Save before closing?" dialog. Guarded +
+					# deferred so a nested main-loop iteration can't re-enter it.
+					get_tree().create_timer(0.5).timeout.connect(_do_restart, CONNECT_ONE_SHOT)
 		"scene.save":
 			result = _scene_handler.save_scene(editor_interface)
 		"inspector.get_properties":
@@ -229,6 +259,18 @@ func _handle_message(msg: Dictionary) -> void:
 			result = _scene_handler.duplicate_node(editor_interface, params)
 		"scene.move_node":
 			result = _scene_handler.move_node(editor_interface, params)
+		"input_map.list":
+			result = _input_map_handler.list_actions(params)
+		"input_map.add_action":
+			result = _input_map_handler.add_action(params)
+		"input_map.add_event":
+			result = _input_map_handler.add_event(params)
+		"input_map.remove_action":
+			result = _input_map_handler.remove_action(params)
+		"project.add_autoload":
+			result = _autoload_handler.add_autoload(get_parent(), params)
+		"project.remove_autoload":
+			result = _autoload_handler.remove_autoload(get_parent(), params)
 		"signal.list":
 			result = _signal_handler.list_signals(editor_interface, params)
 		"signal.connect":
@@ -243,6 +285,8 @@ func _handle_message(msg: Dictionary) -> void:
 			result = _script_handler.detach_script(editor_interface, params)
 		"script.get_for_node":
 			result = _script_handler.get_script_for_node(editor_interface, params)
+		"script.validate":
+			result = _script_handler.validate_script(editor_interface, params)
 		"animation.list":
 			result = _animation_handler.list_animations(editor_interface, params)
 		"animation.get":
@@ -262,11 +306,14 @@ func _handle_message(msg: Dictionary) -> void:
 			else:
 				result = _screenshot_handler.capture_game(editor_interface)
 		"resource.import":
-			result = _inspector_handler.import_asset(editor_interface, params)
+			# import_asset awaits EditorFileSystem scan/import; must await here so the response is sent afterwards.
+			result = await _inspector_handler.import_asset(editor_interface, params)
 		"resource.read":
 			result = _inspector_handler.read_resource(editor_interface, params)
 		"resource.write":
 			result = _inspector_handler.write_resource(editor_interface, params)
+		"resource.create":
+			result = _inspector_handler.create_resource(editor_interface, params)
 		"debug.set_breakpoint":
 			if _debug_handler != null:
 				result = _debug_handler.set_breakpoint(editor_interface, params)
@@ -347,6 +394,12 @@ func _handle_message(msg: Dictionary) -> void:
 	else:
 		_send(_client, _protocol.encode_response(id, result))
 
+func _do_restart() -> void:
+	if _restart_fired:
+		return
+	_restart_fired = true
+	EditorInterface.restart_editor.call_deferred(false)
+
 func _handle_editor_status() -> Dictionary:
 	# Godot 4.7 reports a single empty path when no scene is open; skip those
 	# so callers can treat an empty list as "nothing open".
@@ -354,8 +407,21 @@ func _handle_editor_status() -> Dictionary:
 	for scene_path in EditorInterface.get_open_scenes():
 		if scene_path != "":
 			open_scenes.append(scene_path)
+	# The scene currently being edited (active tab). Tools that persist to a
+	# .tscn must use this, not open_scenes[0], which is just the first tab.
+	var edited_scene := ""
+	var edited_root := EditorInterface.get_edited_scene_root()
+	if edited_root:
+		edited_scene = edited_root.scene_file_path
+	var cfg := ConfigFile.new()
+	var addon_version := ""
+	if cfg.load("res://addons/godot_mcp_bridge/plugin.cfg") == OK:
+		addon_version = str(cfg.get_value("plugin", "version", ""))
 	return {
+		"addon_version": addon_version,
+		"edited_scene": edited_scene,
 		"connected": true,
+		"boot_id": _boot_id,
 		"open_scenes": open_scenes,
 		"is_playing": EditorInterface.is_playing_scene(),
 		"project_path": ProjectSettings.globalize_path("res://")

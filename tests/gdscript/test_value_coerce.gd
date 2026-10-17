@@ -32,6 +32,12 @@ func _check(actual, expected, label: String) -> void:
 		])
 
 
+func _check_true(cond: bool, label: String) -> void:
+	_checks += 1
+	if not cond:
+		_failures.append(label)
+
+
 func _run() -> void:
 	# Scalars
 	_check(Coerce.coerce(5, TYPE_INT), 5, "int")
@@ -65,5 +71,57 @@ func _run() -> void:
 	_check(Coerce.coerce([1, 2, 3, 4], TYPE_RECT2), Rect2(1, 2, 3, 4), "Rect2 array")
 	_check(Coerce.coerce({"position": {"x": 1, "y": 2}, "size": {"x": 3, "y": 4}}, TYPE_RECT2I), Rect2i(1, 2, 3, 4), "Rect2i")
 
-	# Unknown/unsupported type passes the value through unchanged.
-	_check(Coerce.coerce("res://x.png", TYPE_OBJECT), "res://x.png", "passthrough Object")
+	# NodePath (typed export and NodePath properties)
+	_check(Coerce.coerce("../Other", TYPE_NODE_PATH), NodePath("../Other"), "NodePath string")
+	_check(Coerce.coerce(NodePath("A/B"), TYPE_NODE_PATH), NodePath("A/B"), "NodePath passthrough")
+	_check(Coerce.coerce(null, TYPE_NODE_PATH), NodePath(), "NodePath null")
+
+	# TYPE_OBJECT: clear, Resource/Script load, Node-typed path → NodePath
+	_check(Coerce.coerce(null, TYPE_OBJECT), null, "Object null clears")
+	_check(Coerce.coerce("", TYPE_OBJECT), null, "Object empty string clears")
+
+	var script_path := "res://addons/godot_mcp_bridge/plugin.gd"
+	var loaded = Coerce.coerce(script_path, TYPE_OBJECT, PROPERTY_HINT_RESOURCE_TYPE, "Script")
+	_check_true(loaded is Script, "Object res:// loads Script")
+	_check_true(loaded != null and loaded.resource_path == script_path, "Object loaded path matches")
+
+	var node_path_val = Coerce.coerce("../Target", TYPE_OBJECT, PROPERTY_HINT_NODE_TYPE, "Node")
+	_check(node_path_val, NodePath("../Target"), "Object NODE_TYPE hint → NodePath")
+
+	# resolve_for_assignment turns that NodePath into a live Node relative to owner.
+	# Paths are relative to the property owner (Godot Node export convention).
+	var root := Node.new()
+	root.name = "Root"
+	var owner := Node.new()
+	owner.name = "Owner"
+	var sibling := Node.new()
+	sibling.name = "Target"
+	root.add_child(owner)
+	root.add_child(sibling)
+	var resolved := Coerce.resolve_for_assignment(node_path_val, owner, TYPE_OBJECT)
+	_check_true(resolved["ok"] == true, "resolve ok")
+	_check_true(resolved["value"] == sibling, "resolve finds sibling via ../Target")
+	var child := Node.new()
+	child.name = "Child"
+	owner.add_child(child)
+	var child_res := Coerce.resolve_for_assignment(NodePath("Child"), owner, TYPE_OBJECT)
+	_check_true(child_res["ok"] and child_res["value"] == child, "resolve finds direct child")
+	var missing := Coerce.resolve_for_assignment(NodePath("Missing"), owner, TYPE_OBJECT)
+	_check_true(missing["ok"] == false, "resolve missing fails")
+
+	# Scene-root fallback: owner-relative "Enemy" fails (sibling is not a child of
+	# owner), but the same path resolves from scene_root.
+	var enemy := Node.new()
+	enemy.name = "Enemy"
+	root.add_child(enemy)
+	var owner_only := Coerce.resolve_for_assignment(NodePath("Enemy"), owner, TYPE_OBJECT)
+	_check_true(owner_only["ok"] == false, "owner-relative Enemy fails (not under owner)")
+	var via_root := Coerce.resolve_for_assignment(NodePath("Enemy"), owner, TYPE_OBJECT, root)
+	_check_true(via_root["ok"] == true, "root fallback ok for Enemy")
+	_check_true(via_root["value"] == enemy, "root fallback finds Enemy")
+	var still_missing := Coerce.resolve_for_assignment(NodePath("Nope"), owner, TYPE_OBJECT, root)
+	_check_true(still_missing["ok"] == false, "root fallback still fails for missing")
+	root.free()
+
+	# Unknown/unsupported type still passes the value through unchanged.
+	_check(Coerce.coerce({"x": 1}, TYPE_DICTIONARY), {"x": 1}, "passthrough Dictionary")

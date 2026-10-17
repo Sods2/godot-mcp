@@ -14,6 +14,7 @@ import { registerFileTools } from "../tools/file-tools.js";
 import { registerRunTools } from "../tools/run-tools.js";
 import { registerTestTools } from "../tools/test-tools.js";
 import { registerExportTools } from "../tools/export-tools.js";
+import { registerInputMapTools } from "../tools/input-map-tools.js";
 
 // Tools registered inline in index.ts
 const INLINE_TOOL_NAMES = [
@@ -21,13 +22,11 @@ const INLINE_TOOL_NAMES = [
   "godot_list_projects",
   "godot_get_project_info",
   "godot_launch_editor",
-  "godot_run_project",
-  "godot_stop_project",
-  "godot_get_debug_output",
   "godot_get_uid",
   "godot_update_uids",
   "godot_get_autoloads",
   "godot_add_autoload",
+  "godot_remove_autoload",
 ];
 
 const EXPECTED_TOOL_NAMES = [
@@ -37,6 +36,9 @@ const EXPECTED_TOOL_NAMES = [
   "godot_get_selected_nodes",
   "godot_get_node_properties",
   "godot_open_scene",
+  "godot_reload_scene",
+  "godot_close_scene",
+  "godot_reload_project",
   "godot_reparent_node",
   "godot_rename_node",
   "godot_duplicate_node",
@@ -77,6 +79,7 @@ const EXPECTED_TOOL_NAMES = [
   "godot_get_profiler_data",
   // Scene tools
   "godot_add_node",
+  "godot_instance_scene",
   "godot_remove_node",
   "godot_set_property",
   "godot_save_scene",
@@ -95,6 +98,7 @@ const EXPECTED_TOOL_NAMES = [
   "godot_import_asset",
   "godot_read_resource",
   "godot_write_resource",
+  "godot_create_resource",
   // Run tools
   "godot_run_scene",
   "godot_stop_scene",
@@ -109,10 +113,15 @@ const EXPECTED_TOOL_NAMES = [
   "godot_list_export_presets",
   "godot_export_project",
   "godot_export_mesh_library",
+  // Input Map tools
+  "godot_list_input_actions",
+  "godot_add_input_action",
+  "godot_add_input_event",
+  "godot_remove_input_action",
 ];
 
 describe("tool-registration", () => {
-  it("registers all 66 modular tools via register* functions", () => {
+  it("registers all 70 modular tools via register* functions", () => {
     const mockServer = createMockServer();
     const mockBridge = createMockBridge();
     const mockPM = createMockProcessManager();
@@ -130,6 +139,7 @@ describe("tool-registration", () => {
     registerRunTools(mockServer.server, mockPM, mockBridge, godotPath);
     registerTestTools(mockServer.server, godotPath);
     registerExportTools(mockServer.server, godotPath);
+    registerInputMapTools(mockServer.server, mockBridge);
 
     const registered = mockServer.getToolNames();
     expect(registered).toHaveLength(EXPECTED_TOOL_NAMES.length);
@@ -156,6 +166,7 @@ describe("tool-registration", () => {
     registerRunTools(mockServer.server, mockPM, mockBridge, godotPath);
     registerTestTools(mockServer.server, godotPath);
     registerExportTools(mockServer.server, godotPath);
+    registerInputMapTools(mockServer.server, mockBridge);
 
     const names = mockServer.getToolNames();
     const unique = new Set(names);
@@ -180,6 +191,7 @@ describe("tool-registration", () => {
     registerRunTools(mockServer.server, mockPM, mockBridge, godotPath);
     registerTestTools(mockServer.server, godotPath);
     registerExportTools(mockServer.server, godotPath);
+    registerInputMapTools(mockServer.server, mockBridge);
 
     for (const [, tool] of mockServer.getTools()) {
       expect(tool.description.length).toBeGreaterThan(0);
@@ -188,13 +200,14 @@ describe("tool-registration", () => {
 
   it("all inline tool names are documented in INLINE_TOOL_NAMES constant", () => {
     // This verifies the expected inline tools list is complete
-    expect(INLINE_TOOL_NAMES).toHaveLength(11);
+    expect(INLINE_TOOL_NAMES).toHaveLength(9);
     expect(INLINE_TOOL_NAMES).toContain("godot_get_version");
     expect(INLINE_TOOL_NAMES).toContain("godot_get_autoloads");
     expect(INLINE_TOOL_NAMES).toContain("godot_add_autoload");
+    expect(INLINE_TOOL_NAMES).toContain("godot_remove_autoload");
   });
 
-  it("total tool count (modular + inline) equals 77", () => {
-    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(77);
+  it("total tool count (modular + inline) equals 84", () => {
+    expect(EXPECTED_TOOL_NAMES.length + INLINE_TOOL_NAMES.length).toBe(84);
   });
 });
