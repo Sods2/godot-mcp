@@ -4,6 +4,60 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-22
+
+The Godot addon and the npm package must be updated together: their versions
+must match. An outdated addon is now detected and reported.
+
+### Added
+
+- **`godot_remove_autoload`**: removes an autoload through the editor.
+- **Input Map tools**: add, list and remove actions and add events (key, mouse,
+  joypad button and motion), applied through the editor's `ProjectSettings`. The
+  editor Input Map UI refreshes after edits, including on the first call.
+  Duplicate events are skipped.
+- **`godot_reload_scene`, `godot_close_scene`, `godot_reload_project`**: reload or
+  close an open scene, or reload the project. They refuse to discard unsaved
+  changes unless `force` is set.
+- **`godot_instance_scene`, `godot_create_resource`**: instance a scene as a child
+  node (self and circular instancing are refused) and create a resource file
+  (with an overwrite guard).
+- **Inline sub-resources and `ExtResource` coercion** in `godot_set_property` and
+  `godot_add_node`: `{type: ...}` values create sub-resources, and `ExtResource`
+  values are coerced, with clear errors when they cannot be.
+- **Addon version handshake**: an outdated addon is detected (including via
+  unknown-method errors), and a warning is shown once per session on the first
+  bridge tool call.
+- **`GODOT_PATH` auto-detection** is improved across platforms.
+
+### Changed
+
+- **`godot_add_autoload`** now goes through the editor. Previously the autoload
+  was written to `project.godot` and then wiped by the editor's next save.
+- **`godot_validate_script`** uses the editor bridge when connected. Headless
+  validation downgrades autoload identifier errors to warnings.
+- **`godot_set_property`** failures are returned as MCP errors.
+- **Install** copies `package-lock.json` and uses `npm ci`.
+- **Docs**: the plugin enable name is corrected to "MCP Bridge" and the tool
+  count is corrected (84 tools).
+
+### Fixed
+
+- **Reconnect**: duplicate bridge connect attempts after a reload no longer occur.
+- **`godot_set_property`** coerces Node exports to `NodePath` and loads Resources.
+- **`godot_add_node`** applies the script before Node exports, with a
+  root-relative path fallback.
+- **`godot_create_scene`** attaches a script for a `class_name` or script-path
+  root instead of writing an invalid `type=`, and rejects unknown or non-Node
+  `root_node_type` values.
+- **`godot_import_asset`** scans the filesystem before reimport so new files get
+  `.import` sidecars, writes a typed sidecar string for Godot 4.7, and reports an
+  empty path as an error.
+- **`godot_connect_signal` / `godot_disconnect_signal`** persist and read
+  connections in the edited scene, not the first open scene.
+- **`godot_get_autoloads`** strips quotes before checking the `*` enabled prefix.
+- **`project.godot`** rewrites preserve multi-line values.
+
 ## [1.2.0] - 2026-09-19
 
 ### Fixed

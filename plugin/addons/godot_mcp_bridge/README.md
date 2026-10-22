@@ -1,6 +1,6 @@
 # MCP Bridge - Godot EditorPlugin
 
-> Part of [godot-mcp](https://github.com/Sods2/godot-mcp) &mdash; v1.2.0
+> Part of [godot-mcp](https://github.com/Sods2/godot-mcp), v1.3.0
 
 A Godot 4.x editor plugin that exposes editor capabilities via a local TCP bridge using JSON-RPC over Content-Length framing.
 
