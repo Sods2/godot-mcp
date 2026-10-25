@@ -24,7 +24,7 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
   exit 1
 }
 
-$NodeMajor = [int](& node -p 'process.versions.node.split(".")[0]')
+$NodeMajor = [int]((& node --version).TrimStart('v').Split('.')[0])
 if ($NodeMajor -lt 18) {
   Write-Error "Node.js 18 or later is required (found $(node --version))."
   exit 1
